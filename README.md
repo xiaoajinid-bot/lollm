@@ -252,3 +252,129 @@ Placeholder yang didukung: `{{nama_argumen}}` untuk argumen model dan
 ```bash
 npm test   # 40 test: parser tool, executor, agent loop, dan endpoint API (SSE)
 ```
+
+---
+
+## UTCP (Universal Tool Calling Protocol)
+
+Server ini juga berbicara **UTCP** — standar terbuka dari
+[universal-tool-calling-protocol/typescript-utcp](https://github.com/universal-tool-calling-protocol/typescript-utcp)
+yang memungkinkan agen memanggil tool lintas protokol (HTTP, MCP, SSE, …) tanpa
+middleware tambahan. Implementasinya native (tanpa dependency baru) dan dibatasi
+pada transport yang masuk akal untuk Vercel Serverless.
+
+### Dua arah integrasi
+
+**A. Sebagai UTCP provider** — server menerbitkan manual sendiri:
+
+```bash
+curl -s https://lollm-psi.vercel.app/.well-known/utcp
+```
+
+```json
+{
+  "utcp_version": "1.0.0",
+  "manual_version": "1.0.0",
+  "tools": [
+    {
+      "name": "calculate",
+      "description": "Menghitung ekspresi matematika (aritmetika, pangkat, akar, fungsi seperti sqrt/min/max).",
+      "inputs": { "type": "object", "properties": { "expression": { "type": "string" } }, "required": ["expression"] },
+      "outputs": {},
+      "tags": ["builtin", "lollm"],
+      "tool_call_template": {
+        "call_template_type": "http",
+        "name": "lollm",
+        "http_method": "POST",
+        "url": "https://lollm-psi.vercel.app/api/tools?tool=calculate",
+        "content_type": "application/json"
+      }
+    }
+  ]
+}
+```
+
+Klien UTCP (TypeScript/Python) bisa langsung `registerManual({ call_template_type: 'http', url: '<domain>/.well-known/utcp' })`
+lalu memanggil `lollm.calculate({ expression: "2+2" })`.
+
+**B. Sebagai UTCP client** — server menarik manual pihak ketiga dan
+mengeksposnya sebagai tool untuk model:
+
+```bash
+# 1) Discovery ad-hoc
+curl -s https://lollm-psi.vercel.app/api/utcp/discover \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://contoh.com/.well-known/utcp","name":"demo"}'
+
+# 2) Panggil tool hasil discovery
+curl -s https://lollm-psi.vercel.app/api/utcp/call \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"demo.get_weather","arguments":{"city":"Bandung"}}'
+```
+
+Untuk pemakaian permanen, daftarkan lewat environment variable:
+
+```bash
+LLM_UTCP_MANUALS='[
+  {"name":"cuaca","call_template_type":"http","url":"https://contoh.com/.well-known/utcp"},
+  {"name":"openapi_demo","call_template_type":"http","url":"https://contoh.com/openapi.json"},
+  {"name":"tools","call_template_type":"mcp","config":{"mcpServers":{"main":{"transport":"http","url":"https://mcp.contoh.com/mcp"}}}},
+  {"name":"inline","call_template_type":"text","content":"{\"utcp_version\":\"1.0.0\",\"tools\":[{\"name\":\"ping\",\"tool_call_template\":{\"call_template_type\":\"http\",\"url\":\"https://contoh.com/ping\"}}]}"}
+]'
+
+# Host tujuan wajib diizinkan (proteksi SSRF)
+LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
+```
+
+Setelah itu tool muncul otomatis di `GET /api/tools` (source `utcp`) dan di panel
+**Tool & Connector** pada Web UI, siap dipanggil model lewat `tools` seperti biasa.
+
+### Endpoint UTCP
+
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET` | `/.well-known/utcp` (alias `/api/utcp/manual`) | Manual UTCP milik server ini |
+| `GET` | `/api/utcp` | Status manual terdaftar, protokol yang didukung, konfigurasi |
+| `POST` | `/api/utcp/discover` | Discovery manual dari URL / template (UTCP manual, OpenAPI, MCP) |
+| `POST` | `/api/utcp/call` | Memanggil tool UTCP terdaftar (`{"tool":"manual.tool","arguments":{…}}`) |
+
+### Kompatibilitas transport
+
+| Transport | Discovery manual | Pemanggilan tool | Catatan |
+|---|---|---|---|
+| `http` | ✅ | ✅ | Path/query/header/body, `auth` (api_key, basic, oauth2 client credentials) |
+| `streamable_http` | – | ✅ | Respons streaming diagregasi |
+| `mcp` (transport `http`) | ✅ `tools/list` | ✅ `tools/call` | JSON-RPC + SSE response, sesi `Mcp-Session-Id` |
+| `sse` | – | ⚠️ terbatas | Mengumpulkan event sampai timeout (serverless tidak boleh koneksi panjang) |
+| `text` | ✅ | – | Manual inline di env |
+| `file` | ✅ (opt-in) | – | Hanya di dalam `LLM_UTCP_FILE_ROOT`, butuh `LLM_UTCP_ALLOW_FILE=true` |
+| `cli`, `websocket`, `grpc`, `mcp stdio` | ❌ | ❌ | Butuh proses/koneksi persisten — tidak tersedia di serverless |
+
+Tool dengan transport yang tidak didukung tetap ditampilkan di hasil discovery
+dengan `supported: false` beserta alasannya, sehingga tidak gagal diam-diam.
+
+### Fitur UTCP yang diikuti
+
+- Format manual: `utcp_version`, `manual_version`, `tools[]` (`name`, `description`,
+  `inputs`, `outputs`, `tags`, `average_response_size`, `tool_call_template`)
+- Penamaan tool bernamespace: `manual.tool` (dipakai juga untuk MCP: `manual.tool`)
+- Substitusi variabel `${VAR}` dengan namespace manual (`github_api` → `github__api_VAR`)
+  dan `${env:VAR}` untuk secret
+- Placeholder URL `{param}` / `${param}`, `header_fields`, `body_field`, `content_type`
+- Konversi **OpenAPI 3 / Swagger 2** → UTCP manual (GET/POST/PUT/PATCH/DELETE,
+  parameter path/query/header + request body)
+- Discovery via HTTP (JSON), text inline, MCP `tools/list`, dan berkas lokal (opt-in)
+- Guard keamanan sama seperti connector: allowlist host + blokir alamat privat,
+  link-local, metadata cloud, dan `.internal`
+
+### Environment variable UTCP
+
+| Variabel | Default | Fungsi |
+|---|---|---|
+| `LLM_UTCP_MANUALS` | – | JSON array manual call template (`http`, `text`, `mcp`, `file`) |
+| `LLM_TOOL_HTTP_ALLOW_HOSTS` | – | Allowlist host untuk discovery & pemanggilan (dipakai bersama connector) |
+| `LLM_UTCP_ALLOW_FILE` | `false` | Izinkan template `file` |
+| `LLM_UTCP_FILE_ROOT` | `/tmp` | Root direktori yang boleh dibaca template `file` |
+
+Manual yang di-discovery di-cache 5 menit di memori instance (warm invocation),
+sehingga tidak ada request discovery berulang pada setiap chat.

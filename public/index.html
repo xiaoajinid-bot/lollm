@@ -1222,6 +1222,7 @@
         </div>
         <div class="warmup-hint" id="toolsHint">
           Model boleh memanggil tool sebelum menjawab. Jejak panggilan muncul sebagai chip di pesan.
+          Tool dari manual UTCP (env <code>LLM_UTCP_MANUALS</code>) muncul dengan badge <code>utcp</code>.
         </div>
       </section>
 
@@ -1355,6 +1356,9 @@
             <div class="ep-pill"><span class="method post">POST</span> <code>/api/generate</code> Ollama Compatible</div>
             <div class="ep-pill"><span class="method get">GET</span> <code>/api/tools</code> Katalog Tool &amp; Connector</div>
             <div class="ep-pill"><span class="method post">POST</span> <code>/api/tools</code> Panggil Tool Langsung</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/.well-known/utcp</code> Manual UTCP Server</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/api/utcp</code> Status Manual UTCP</div>
+            <div class="ep-pill"><span class="method post">POST</span> <code>/api/utcp/discover</code> Discovery Manual</div>
           </div>
 
           <div class="code-card">
@@ -1364,6 +1368,7 @@
                 <button class="secondary-btn sm" id="testModelsBtn">GET /v1/models</button>
                 <button class="secondary-btn sm" id="testChatApiBtn">POST /v1/chat/completions</button>
                 <button class="secondary-btn sm" id="testToolsBtn">GET /api/tools</button>
+                <button class="secondary-btn sm" id="testUtcpBtn">GET /api/utcp</button>
               </div>
             </div>
             <pre class="code-block" id="liveApiOutput">Klik salah satu tombol di atas untuk menguji respons JSON langsung dari server...</pre>
@@ -1411,7 +1416,15 @@
 
           <div class="code-card">
             <div class="code-card-header">
-              <span>6. Ollama Compatible Endpoint (/api/generate)</span>
+              <span>6. UTCP — Universal Tool Calling Protocol</span>
+              <button class="copy-small-btn" data-copy-target="utcpSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="utcpSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>7. Ollama Compatible Endpoint (/api/generate)</span>
               <button class="copy-small-btn" data-copy-target="ollamaSnippet">Salin Kode</button>
             </div>
             <pre class="code-block" id="ollamaSnippet"></pre>
@@ -1485,6 +1498,8 @@
       toolRounds: document.getElementById('toolRounds'),
       toolsHint: document.getElementById('toolsHint'),
       testToolsBtn: document.getElementById('testToolsBtn'),
+      testUtcpBtn: document.getElementById('testUtcpBtn'),
+      utcpSnippet: document.getElementById('utcpSnippet'),
       toolSnippet: document.getElementById('toolSnippet'),
       connectorSnippet: document.getElementById('connectorSnippet'),
     };
@@ -1576,7 +1591,11 @@
 
         const tag = document.createElement('span');
         tag.className = 'tool-tag';
-        tag.textContent = tool.available ? tool.source || 'builtin' : 'butuh allowlist';
+        tag.textContent = tool.available
+          ? tool.source === 'utcp'
+            ? `utcp:${tool.utcp?.call_template_type || 'http'}`
+            : tool.source || 'builtin'
+          : 'butuh allowlist';
 
         row.append(checkbox, label, tag);
         els.toolList.appendChild(row);
@@ -1885,6 +1904,29 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="api.contoh.com"
 LLM_TOOL_MAX_ROUNDS="3"        # batas putaran tool per request
 LLM_TOOLS_DISABLED="http_fetch" # matikan tool tertentu
 LLM_TOOLS_DIRECT_INVOKE="disabled" # matikan POST /api/tools`;
+
+      els.utcpSnippet.textContent = `# 1) Server ini menerbitkan manual UTCP di /.well-known/utcp
+curl -s ${origin}/.well-known/utcp | head -40
+
+# 2) Discovery manual UTCP eksternal (UTCP manual, OpenAPI, atau MCP server)
+curl -s ${origin}/api/utcp/discover \\
+  -H "Content-Type: application/json" \\
+  -d '{"url":"https://contoh.com/.well-known/utcp","name":"demo"}'
+
+# 3) Panggil tool UTCP yang terdaftar (nama: manual.tool)
+curl -s ${origin}/api/utcp/call \\
+  -H "Content-Type: application/json" \\
+  -d '{"tool":"demo.get_weather","arguments":{"city":"Bandung"}}'
+
+# 4) Daftarkan manual permanen lewat environment variable
+LLM_UTCP_MANUALS='[
+  {"name":"cuaca","call_template_type":"http","url":"https://contoh.com/utcp"},
+  {"name":"tools","call_template_type":"mcp","config":{"mcpServers":{"main":{"transport":"http","url":"https://mcp.contoh.com/mcp"}}}}
+]'
+LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
+
+# Protokol didukung: http, streamable_http, mcp (HTTP), sse
+# Tidak didukung di serverless: cli, websocket, grpc, mcp stdio`;
 
       els.ollamaSnippet.textContent = `curl -s ${origin}/api/generate \\
   -H "Content-Type: application/json" \\
@@ -2311,6 +2353,19 @@ LLM_TOOLS_DIRECT_INVOKE="disabled" # matikan POST /api/tools`;
       try {
         const t0 = performance.now();
         const res = await fetch('/api/tools', { cache: 'no-store' });
+        const json = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
+      } catch (err) {
+        els.liveApiOutput.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    els.testUtcpBtn.addEventListener('click', async () => {
+      els.liveApiOutput.textContent = 'Memanggil GET /api/utcp ...';
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/api/utcp', { cache: 'no-store' });
         const json = await res.json();
         const ms = Math.round(performance.now() - t0);
         els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);

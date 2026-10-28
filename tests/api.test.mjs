@@ -292,3 +292,216 @@ test('GET /api/health memakai engine (stub) tanpa error', async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.json.status, 'warm');
 });
+
+/* ------------------------- UTCP endpoints ------------------------- */
+
+const UTCP_MANUAL_URL_ENV = JSON.stringify([
+  { name: 'weather_api', call_template_type: 'http', url: 'https://utcp.example.com/manual' },
+]);
+
+function withEnv(vars, fn) {
+  const previous = {};
+  for (const [key, value] of Object.entries(vars)) {
+    previous[key] = process.env[key];
+    process.env[key] = value;
+  }
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    });
+}
+
+function stubUtcpFetch() {
+  const original = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+
+    if (String(url).includes('api.example.com/weather/')) {
+      const payload = JSON.stringify({ city: 'Bandung', temp_c: 27, condition: 'berawan' });
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (key) => (String(key).toLowerCase() === 'content-type' ? 'application/json' : null) },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(payload));
+            controller.close();
+          },
+        }),
+      };
+    }
+
+    const payload = JSON.stringify({
+      utcp_version: '1.0.0',
+      manual_version: '1.0.0',
+      tools: [
+        {
+          name: 'get_weather',
+          description: 'Cuaca terkini',
+          inputs: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+          outputs: {},
+          tags: ['weather'],
+          tool_call_template: {
+            call_template_type: 'http',
+            http_method: 'GET',
+            url: 'https://api.example.com/weather/{city}',
+          },
+        },
+      ],
+    });
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: (key) => (String(key).toLowerCase() === 'content-type' ? 'application/json' : null) },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      }),
+    };
+  };
+  return { calls, restore: () => (globalThis.fetch = original) };
+}
+
+test('GET /.well-known/utcp menyajikan manual UTCP server ini', async () => {
+  resetStub();
+  const res = await call({ method: 'GET', url: '/api/llm?__route=.well-known/utcp' });
+
+  assert.equal(res.statusCode, 200);
+  const manual = res.json;
+  assert.equal(manual.utcp_version, '1.0.0');
+  assert.ok(Array.isArray(manual.tools) && manual.tools.length >= 5);
+
+  // Tool yang butuh allowlist (http_fetch) tidak diiklankan bila allowlist belum diset
+  assert.ok(!manual.tools.some((tool) => tool.name === 'http_fetch'));
+
+  const calculate = manual.tools.find((tool) => tool.name === 'calculate');
+  assert.ok(calculate, 'tool calculate harus ada di manual');
+  assert.equal(calculate.tool_call_template.call_template_type, 'http');
+  assert.match(calculate.tool_call_template.url, /\/api\/tools\?tool=calculate$/);
+  assert.equal(manual.tools[0].tool_call_template.http_method, 'POST');
+});
+
+test('GET /api/utcp merangkum manual terdaftar', async () => {
+  resetStub();
+  await withEnv({ LLM_UTCP_MANUALS: UTCP_MANUAL_URL_ENV, LLM_TOOL_HTTP_ALLOW_HOSTS: 'utcp.example.com,api.example.com' }, async () => {
+    const stub = stubUtcpFetch();
+    try {
+      const res = await call({ method: 'GET', url: '/api/llm?__route=api/utcp' });
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.json.ok, true);
+      assert.equal(res.json.configured, true);
+      assert.equal(res.json.manuals.count, 1);
+      assert.equal(res.json.manuals.tools, 1);
+      assert.match(res.json.manuals.data[0].tool_names[0], /^weather_api\.get_weather$/);
+      assert.ok(res.json.own_tools >= 6);
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+test('POST /api/utcp/discover mengembalikan tools dari URL manual', async () => {
+  resetStub();
+  await withEnv({ LLM_TOOL_HTTP_ALLOW_HOSTS: 'utcp.example.com' }, async () => {
+    const stub = stubUtcpFetch();
+    try {
+      const res = await call({
+        method: 'POST',
+        url: '/api/llm?__route=api/utcp/discover',
+        body: { url: 'https://utcp.example.com/manual', name: 'demo' },
+      });
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.json.ok, true);
+      assert.equal(res.json.manual.name, 'demo');
+      assert.equal(res.json.manual.tools[0].name, 'get_weather');
+      assert.equal(res.json.manual.tools[0].supported, true);
+    } finally {
+      stub.restore();
+    }
+  });
+});
+
+test('POST /api/utcp/call mengeksekusi tool UTCP terdaftar', async () => {
+  resetStub();
+  await withEnv(
+    {
+      LLM_UTCP_MANUALS: UTCP_MANUAL_URL_ENV,
+      LLM_TOOL_HTTP_ALLOW_HOSTS: 'utcp.example.com,api.example.com',
+    },
+    async () => {
+      const stub = stubUtcpFetch();
+      try {
+        const res = await call({
+          method: 'POST',
+          url: '/api/llm?__route=api/utcp/call',
+          body: { tool: 'weather_api.get_weather', arguments: { city: 'Bandung' } },
+        });
+        assert.equal(res.statusCode, 200);
+        assert.equal(res.json.ok, true);
+        assert.equal(res.json.protocol, 'http');
+        assert.deepEqual(res.json.result.data, { city: 'Bandung', temp_c: 27, condition: 'berawan' });
+        assert.ok(
+          stub.calls.some((item) => item.url.includes('api.example.com/weather/Bandung')),
+          'path parameter {city} harus tersubstitusi'
+        );
+
+        const unknown = await call({
+          method: 'POST',
+          url: '/api/llm?__route=api/utcp/call',
+          body: { tool: 'tidak.ada', arguments: {} },
+        });
+        assert.equal(unknown.statusCode, 404);
+      } finally {
+        stub.restore();
+      }
+    }
+  );
+});
+
+test('GET /api/tools menyertakan tool UTCP dan POST /api/tools?tool= bisa memanggilnya', async () => {
+  resetStub();
+  await withEnv(
+    {
+      LLM_UTCP_MANUALS: UTCP_MANUAL_URL_ENV,
+      LLM_TOOL_HTTP_ALLOW_HOSTS: 'utcp.example.com,api.example.com',
+    },
+    async () => {
+      const stub = stubUtcpFetch();
+      try {
+        const listed = await call({ method: 'GET', url: '/api/llm?__route=api/tools' });
+        const names = listed.json.data.map((tool) => tool.function.name);
+        assert.ok(names.includes('weather_api.get_weather'), 'tool UTCP harus muncul di /api/tools');
+        const utcpTool = listed.json.data.find((tool) => tool.function.name === 'weather_api.get_weather');
+        assert.equal(utcpTool.source, 'utcp');
+        assert.equal(utcpTool.utcp.manual, 'weather_api');
+        assert.equal(listed.json.config.utcp_configured, true);
+
+        // Panggilan gaya manual UTCP: nama tool di query, argumen di query
+        const called = await call({
+          method: 'POST',
+          url: '/api/llm?__route=api/tools&tool=weather_api.get_weather&city=Bandung',
+        });
+        assert.equal(called.statusCode, 200);
+        assert.equal(called.json.ok, true);
+        assert.equal(called.json.protocol, 'utcp');
+
+        // Panggilan native lewat body juga tetap jalan
+        const native = await call({
+          method: 'POST',
+          url: '/api/llm?__route=api/tools',
+          body: { name: 'calculate', arguments: { expression: '3*3' } },
+        });
+        assert.equal(native.json.result.result, 9);
+      } finally {
+        stub.restore();
+      }
+    }
+  );
+});

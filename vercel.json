@@ -29,6 +29,30 @@
   ],
   "rewrites": [
     {
+      "source": "/v1/utcp",
+      "destination": "/api/llm?__route=api/utcp"
+    },
+    {
+      "source": "/api/utcp",
+      "destination": "/api/llm?__route=api/utcp"
+    },
+    {
+      "source": "/api/utcp/call",
+      "destination": "/api/llm?__route=api/utcp/call"
+    },
+    {
+      "source": "/api/utcp/discover",
+      "destination": "/api/llm?__route=api/utcp/discover"
+    },
+    {
+      "source": "/api/utcp/manual",
+      "destination": "/api/llm?__route=api/utcp/manual"
+    },
+    {
+      "source": "/.well-known/utcp",
+      "destination": "/api/llm?__route=.well-known/utcp"
+    },
+    {
       "source": "/v1/chat/completions",
       "destination": "/api/llm?__route=v1/chat/completions"
     },

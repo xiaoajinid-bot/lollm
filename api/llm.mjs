@@ -8,6 +8,16 @@ import {
 } from '../lib/llm-engine.mjs';
 import { executeToolCall, getToolRegistry, listTools } from '../lib/tools.mjs';
 import { runToolAgent } from '../lib/agent.mjs';
+import {
+  UTCP_MANUAL_VERSION,
+  UTCP_PROTOCOL_VERSION,
+  buildOwnManual,
+  buildRegistryEntries,
+  callUtcpTool,
+  describeManuals,
+  discoverManual,
+  loadConfiguredManuals,
+} from '../lib/utcp.mjs';
 
 // Safe dynamic import hint for Vercel NFT bundler on Linux x64
 import('@node-llama-cpp/linux-x64').catch(() => {});
@@ -19,6 +29,10 @@ const AVAILABLE_ENDPOINTS = [
   'POST /v1/chat/completions',
   'GET /api/tools',
   'POST /api/tools',
+  'GET /.well-known/utcp',
+  'GET /api/utcp',
+  'POST /api/utcp/discover',
+  'POST /api/utcp/call',
   'GET /api/tags',
   'POST /api/generate',
 ];
@@ -80,8 +94,29 @@ function readToolConfig(body) {
   return { tools, functions, toolChoice, maxRounds };
 }
 
-function toolContext() {
-  return { health: getSystemHealth };
+function toolContext(utcpTools = []) {
+  return { health: getSystemHealth, utcpTools };
+}
+
+function requestOrigin(req) {
+  const host = req.headers?.['x-forwarded-host'] || req.headers?.host || 'localhost';
+  const proto = req.headers?.['x-forwarded-proto'] || (String(host).startsWith('localhost') ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+/** Discovery manual UTCP terdaftar (env LLM_UTCP_MANUALS), di-cache di memori. */
+async function resolveUtcp(req) {
+  try {
+    const result = await loadConfiguredManuals({ env: process.env });
+    return {
+      configured: result.configured,
+      manuals: result.manuals,
+      errors: result.errors,
+      entries: buildRegistryEntries(result.manuals, { env: process.env }),
+    };
+  } catch (err) {
+    return { configured: false, manuals: [], errors: [{ manual: 'config', message: err.message }], entries: [] };
+  }
 }
 
 function toOpenAIToolCall(call) {
@@ -172,7 +207,8 @@ export default async function handler(req, res) {
       const names = namesParam
         ? namesParam.split(',').map((n) => n.trim()).filter(Boolean)
         : null;
-      const tools = listTools({ names });
+      const utcp = await resolveUtcp(req);
+      const tools = listTools({ names, utcpTools: utcp.entries });
       const connectorError = getToolRegistry().connectorError || null;
 
       sendJson(res, 200, {
@@ -188,6 +224,7 @@ export default async function handler(req, res) {
           server_side: tool.server_side,
           available: tool.available,
           requires_allowlist: tool.requires_allowlist,
+          ...(tool.utcp ? { utcp: tool.utcp } : {}),
         })),
         count: tools.length,
         config: {
@@ -199,6 +236,8 @@ export default async function handler(req, res) {
             .filter(Boolean),
           max_rounds: Number(process.env.LLM_TOOL_MAX_ROUNDS) || 3,
           connectors_error: connectorError,
+          utcp_configured: utcp.configured,
+          utcp_manuals: describeManuals(utcp.manuals, { errors: utcp.errors }),
         },
       });
       return;
@@ -216,7 +255,17 @@ export default async function handler(req, res) {
         return;
       }
       const body = await readJsonBody(req);
-      const name = String(body.name || body.tool || '').trim();
+      const url = new URL(req.url || '/', 'http://localhost');
+      const queryName = url.searchParams.get('tool') || url.searchParams.get('name');
+
+      // Argumen boleh datang dari query string (dipakai manual UTCP)
+      const queryArgs = {};
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key === 'tool' || key === 'name' || key === '__route') continue;
+        queryArgs[key] = value;
+      }
+
+      const name = String(queryName || body.name || body.tool || '').trim();
       if (!name) {
         sendJson(res, 400, {
           error: {
@@ -227,8 +276,13 @@ export default async function handler(req, res) {
         });
         return;
       }
-      const args = body.arguments ?? body.args ?? {};
-      const execution = await executeToolCall({ name, args, ctx: toolContext() });
+      const bodyArgs = body.arguments ?? body.args ?? {};
+      const extraArgs = Object.fromEntries(
+        Object.entries(body).filter(([key]) => !['name', 'tool', 'arguments', 'args'].includes(key))
+      );
+      const args = { ...queryArgs, ...bodyArgs, ...extraArgs };
+      const utcp = await resolveUtcp(req);
+      const execution = await executeToolCall({ name, args, ctx: toolContext(utcp.entries) });
       sendJson(res, execution.ok ? 200 : execution.server_side === false ? 404 : 400, {
         ok: execution.ok,
         tool: name,
@@ -237,7 +291,149 @@ export default async function handler(req, res) {
         result: execution.result ?? null,
         error: execution.error ?? null,
         duration_ms: execution.duration_ms,
+        protocol: execution.source === 'utcp' ? 'utcp' : 'native',
       });
+      return;
+    }
+
+    // 5b. UTCP — manual milik server ini (well-known discovery)
+    if (
+      req.method === 'GET' &&
+      (route === '/.well-known/utcp' || route === '/api/utcp/manual' || route === '/utcp/manual')
+    ) {
+      // Hanya tool yang benar-benar bisa dipanggil dari luar (tidak butuh allowlist kosong)
+      const ownTools = listTools({ env: process.env }).filter((tool) => tool.available);
+      const manual = buildOwnManual({
+        origin: requestOrigin(req),
+        tools: ownTools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+          source: tool.source,
+        })),
+      });
+
+      setCorsHeaders(res);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+      res.end(JSON.stringify(manual, null, 2));
+      return;
+    }
+
+    // 5c. UTCP — status manual terdaftar
+    if (req.method === 'GET' && (route === '/api/utcp' || route === '/v1/utcp')) {
+      const utcp = await resolveUtcp(req);
+      const ownTools = listTools({ env: process.env });
+
+      sendJson(res, 200, {
+        ok: true,
+        utcp_version: UTCP_PROTOCOL_VERSION,
+        manual_version: UTCP_MANUAL_VERSION,
+        own_manual_url: `${requestOrigin(req)}/.well-known/utcp`,
+        own_tools: ownTools.length,
+        configured: utcp.configured,
+        manuals: describeManuals(utcp.manuals, { errors: utcp.errors }),
+        supported_call_protocols: ['http', 'streamable_http', 'mcp', 'sse'],
+        config: {
+          env_var: 'LLM_UTCP_MANUALS',
+          allow_hosts_configured: Boolean(process.env.LLM_TOOL_HTTP_ALLOW_HOSTS),
+          file_protocol_enabled: String(process.env.LLM_UTCP_ALLOW_FILE || '').toLowerCase() === 'true',
+        },
+      });
+      return;
+    }
+
+    // 5d. UTCP — discovery manual (ad-hoc)
+    if (req.method === 'POST' && route === '/api/utcp/discover') {
+      const body = await readJsonBody(req);
+      const template = body.manual || body.template || (body.url ? { call_template_type: 'http', url: body.url } : null);
+      if (!template) {
+        sendJson(res, 400, {
+          error: {
+            message: 'Kirim "url" atau "manual" (call template UTCP).',
+            type: 'invalid_request_error',
+            example: { url: 'https://contoh.com/.well-known/utcp' },
+          },
+        });
+        return;
+      }
+
+      try {
+        const manual = await discoverManual(template, {
+          env: process.env,
+          manualName: body.name || template.name,
+        });
+        sendJson(res, 200, {
+          ok: true,
+          manual: {
+            name: manual.name,
+            utcp_version: manual.utcp_version,
+            manual_version: manual.manual_version,
+            tools: body.include_tools === false
+              ? manual.tools.map((tool) => ({
+                  name: tool.name,
+                  call_type: tool.call_type,
+                  supported: tool.supported,
+                }))
+              : manual.tools,
+            errors: manual.errors,
+          },
+        });
+      } catch (err) {
+        sendJson(res, err.statusCode || 502, {
+          ok: false,
+          error: { message: err.message, type: 'utcp_error' },
+        });
+      }
+      return;
+    }
+
+    // 5e. UTCP — panggil tool lewat protokol UTCP
+    if (req.method === 'POST' && route === '/api/utcp/call') {
+      const body = await readJsonBody(req);
+      const toolName = String(body.tool || body.name || '').trim();
+      if (!toolName) {
+        sendJson(res, 400, {
+          error: { message: 'Parameter "tool" wajib diisi.', type: 'invalid_request_error' },
+        });
+        return;
+      }
+
+      const args = body.arguments ?? body.args ?? {};
+      const utcp = await resolveUtcp(req);
+      const entry = utcp.entries.find((item) => item.name === toolName);
+
+      if (!entry) {
+        sendJson(res, 404, {
+          ok: false,
+          error: {
+            message: `Tool UTCP "${toolName}" tidak terdaftar.`,
+            type: 'not_found',
+            available: utcp.entries.map((item) => item.name),
+          },
+        });
+        return;
+      }
+
+      const started = Date.now();
+      try {
+        const result = await entry.handler(args);
+        sendJson(res, 200, {
+          ok: true,
+          tool: toolName,
+          protocol: entry.utcp?.call_template_type || 'utcp',
+          result,
+          duration_ms: Date.now() - started,
+        });
+      } catch (err) {
+        sendJson(res, err.statusCode || 502, {
+          ok: false,
+          tool: toolName,
+          error: { message: err.message, type: 'utcp_error' },
+          duration_ms: Date.now() - started,
+        });
+      }
       return;
     }
 
@@ -287,6 +483,7 @@ export default async function handler(req, res) {
 
       // Progress unduhan model perlu diteruskan ke SSE saat streaming
       const progressRef = { current: null };
+      const utcp = await resolveUtcp(req);
 
       const agentParams = {
         messages: body.messages,
@@ -299,7 +496,8 @@ export default async function handler(req, res) {
         topP,
         maxTokens,
         env: process.env,
-        ctx: toolContext(),
+        ctx: toolContext(utcp.entries),
+        registry: getToolRegistry({ env: process.env, utcpTools: utcp.entries }),
         runInference: (args) => {
           const { signal, ...rest } = args || {};
           return runChatInference({
