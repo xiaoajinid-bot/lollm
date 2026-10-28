@@ -660,10 +660,49 @@
     .base-url-box, .code-block { border: 0; border-radius: 16px; background: #141218; }
     .ep-pill { border: 0; border-radius: 999px; background: #2b2930; }
     @media (max-width: 860px) {
-      .sidebar { width: 300px; }
-      .topbar { padding: 0 16px; }
-      .messages-container { padding: 20px 16px; }
-      .composer { padding: 10px 16px 16px; }
+      .app-shell { display: block; }
+      .sidebar { width: min(88vw, 320px); padding: 16px 12px 20px; gap: 12px; }
+      .main-area { min-height: 100dvh; height: 100dvh; }
+      .topbar { height: 54px; padding: 0 12px; gap: 8px; }
+      .topbar-left, .topbar-right { gap: 6px; min-width: 0; }
+      .mobile-menu-btn { padding: 7px 10px; }
+      .tab-switcher { flex: 1; min-width: 0; }
+      .tab-btn { flex: 1; min-width: 0; padding: 7px 9px; font-size: 12px; white-space: nowrap; }
+      .ghost-btn { padding: 7px 10px; font-size: 12px; }
+      .progress-banner { padding: 8px 12px; }
+      .messages-container { padding: 16px 12px; gap: 14px; }
+      .empty-state { width: 100%; gap: 10px; }
+      .empty-state h1 { font-size: 23px; line-height: 1.2; }
+      .empty-state p { font-size: 13px; line-height: 1.45; }
+      .starter-grid { gap: 8px; margin-top: 4px; }
+      .starter-card { padding: 13px; border-radius: 18px; }
+      .starter-card span { display: none; }
+      .msg-bubble { max-width: 94%; padding: 10px 13px; font-size: 14px; line-height: 1.5; }
+      .composer { padding: 8px 12px 12px; }
+      .composer-box { gap: 6px; padding: 8px 8px 8px 14px; }
+      #promptInput { font-size: 14px; min-width: 0; }
+      .send-btn { padding: 9px 13px; font-size: 12.5px; }
+      .api-docs-wrap { padding: 16px 12px 28px; gap: 12px; }
+      .api-hero-card { padding: 16px; gap: 12px; }
+      .api-hero-card p { font-size: 13px; }
+      .base-url-box { min-width: 0; width: 100%; }
+      .code-block { font-size: 11.5px; padding: 12px; }
+    }
+
+    @media (max-width: 420px) {
+      .brand { padding-inline: 6px; }
+      .panel { padding: 13px; border-radius: 20px; }
+      .panel-header { font-size: 12px; }
+      .system-info-grid { gap: 6px; }
+      .system-info-grid strong { font-size: 10px; }
+      .metrics-grid { gap: 6px; }
+      .metric-item { padding: 8px; }
+      .metric-label { font-size: 10px; }
+      .metric-val { font-size: 11px; }
+      .topbar-right .ghost-btn { font-size: 0; width: 34px; padding: 8px; }
+      .topbar-right .ghost-btn::before { content: '⋯'; font-size: 18px; line-height: 1; }
+      .tab-btn { padding-inline: 7px; }
+      .empty-badge { font-size: 11px; padding: 5px 11px; }
     }
   </style>
 </head>
