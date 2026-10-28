@@ -54,6 +54,9 @@ Seluruh endpoint sudah dilengkapi header `Access-Control-Allow-Origin: *` sehing
 | `POST` | `/api/warmup` | Preload model GGUF ke RAM container |
 | `GET` | `/v1/models` | Daftar model kompatibel OpenAI SDK |
 | `POST` | `/v1/chat/completions` | Chat Completions OpenAI (`stream: true` SSE & `stream: false` JSON) |
+| `POST` | `/v1/responses` | Responses API OpenAI (`input`, `instructions`, `tools`, `stream`) |
+| `GET` | `/v1/responses/{id}` | Ambil ulang respons dari cache instance (best-effort) |
+| `DELETE` | `/v1/responses/{id}` | Hapus respons dari cache instance |
 | `GET` | `/api/storage` | Konfigurasi sumber model (S3 / Blob / base URL) tanpa membocorkan secret |
 | `GET` | `/api/storage/check` | Verifikasi objek GGUF benar-benar ada di storage (Range 1 byte) |
 | `GET` | `/api/store` | Katalog model GGUF + isi bucket (mana yang sudah tersimpan) |
@@ -96,6 +99,56 @@ resp = client.chat.completions.create(
 for chunk in resp:
     print(chunk.choices[0].delta.content or "", end="", flush=True)
 ```
+
+### Contoh Pemanggilan Responses API
+
+`POST /v1/responses` melayani format baru OpenAI (dipakai `client.responses.create()`
+di SDK Python/JS). Alias: `/api/responses` dan `/responses`.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="https://lokal-llm.vercel.app/v1", api_key="local-no-key-required")
+
+resp = client.responses.create(
+    model="qwen2.5-0.5b-instruct",
+    instructions="Jawab dalam bahasa Indonesia.",
+    input="Tulis fungsi Python untuk membaca CSV besar per potongan.",
+    max_output_tokens=4096,
+)
+print(resp.output_text)
+print(resp.usage.input_tokens, resp.usage.output_tokens)
+```
+
+Streaming:
+
+```python
+stream = client.responses.create(
+    model="qwen2.5-0.5b-instruct",
+    input="Jelaskan cara kerja llama.cpp.",
+    stream=True,
+)
+for event in stream:
+    if event.type == "response.output_text.delta":
+        print(event.delta, end="", flush=True)
+```
+
+Yang didukung:
+
+| Bagian | Dukungan |
+|---|---|
+| `input` | string, item `{role, content}`, part `input_text`/`output_text` |
+| `instructions` | dikirim sebagai system prompt (kebijakan tool server tetap menempel) |
+| `tools` / `tool_choice` | tool `{type:"function", name, parameters}` dikonversi ke format chat; tool milik client dikembalikan sebagai item `function_call` |
+| `max_output_tokens`, `temperature`, `top_p` | diteruskan ke engine (tetap di-clamp batas konteks) |
+| `stream: true` | event SSE: `response.created`, `response.output_text.delta`, `response.function_call_arguments.delta`, `response.completed`, `error` |
+| `previous_response_id` | disambung dari cache memori instance (best-effort) |
+| `metadata`, `store` | `metadata` di-echo; `store: false` mematikan cache |
+| `text.format`, `reasoning`, tool bawaan (`web_search`, `file_search`, dll.) | belum didukung — diabaikan, nama tool-nya dilaporkan di `unsupported_tools` |
+
+Catatan: serverless tidak punya storage lintas instance, jadi `GET /v1/responses/{id}`
+dan `previous_response_id` hanya bekerja selama instance function yang sama masih hidup
+(cold start menghapusnya). Untuk riwayat panjang, kirim ulang riwayat lewat `input`.
 
 ---
 

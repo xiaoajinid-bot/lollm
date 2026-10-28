@@ -55,6 +55,8 @@ const server = http.createServer(async (req, res) => {
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/v1/') ||
+    pathname === '/responses' ||
+    pathname.startsWith('/responses/') ||
     pathname.startsWith('/.well-known/')
   ) {
     await apiModule.default(req, res);
