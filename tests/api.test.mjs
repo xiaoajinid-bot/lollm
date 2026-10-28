@@ -7,6 +7,7 @@ import test from 'node:test';
 // Engine diarahkan ke stub (tanpa node-llama-cpp / model GGUF)
 register('./helpers/stub-engine-loader.mjs', import.meta.url);
 const { default: handler } = await import('../api/llm.mjs');
+const { DEFAULT_MAX_OUTPUT_TOKENS } = await import('../lib/model-limits.mjs');
 
 const CALC_TOOL = {
   type: 'function',
@@ -277,6 +278,67 @@ test('tool_choice none menonaktifkan tool pada request', async () => {
   assert.equal(res.json.choices[0].message.content, 'Jawaban langsung.');
   assert.equal(globalThis.__stubInferenceCalls, 1);
   assert.equal(globalThis.__stubInferenceArgs[0].extraSystemPrompt, '');
+});
+
+test('default max_tokens dinaikkan untuk jawaban panjang', async () => {
+  resetStub(['Kode panjang.']);
+
+  const res = await call({
+    method: 'POST',
+    url: '/api/llm?__route=v1/chat/completions',
+    body: { messages: [{ role: 'user', content: 'Tulis kode panjang' }] },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(DEFAULT_MAX_OUTPUT_TOKENS > 1024, 'default harus jauh di atas 1024');
+  assert.equal(globalThis.__stubInferenceArgs[0].maxTokens, DEFAULT_MAX_OUTPUT_TOKENS);
+});
+
+test('max_tokens besar dari klien diteruskan ke engine', async () => {
+  resetStub(['ok.']);
+
+  await call({
+    method: 'POST',
+    url: '/api/llm?__route=v1/chat/completions',
+    body: { messages: [{ role: 'user', content: 'panjang' }], max_tokens: 6144 },
+  });
+
+  assert.equal(globalThis.__stubInferenceArgs[0].maxTokens, 6144);
+});
+
+test('/api/generate memakai options.num_predict sebagai maxTokens', async () => {
+  resetStub(['ok.']);
+
+  await call({
+    method: 'POST',
+    url: '/api/llm?__route=api/generate',
+    body: { prompt: 'stream', options: { num_predict: 5000 } },
+  });
+
+  assert.equal(globalThis.__stubInferenceArgs[0].maxTokens, 5000);
+});
+
+test('system prompt klien digabung dengan kebijakan tool server', async () => {
+  resetStub(['<tool_call>{"name":"calculate","arguments":{"expression":"2+2"}}</tool_call>', '4']);
+
+  await call({
+    method: 'POST',
+    url: '/api/llm?__route=v1/chat/completions',
+    body: {
+      messages: [
+        { role: 'system', content: 'Gaya: ringkas.' },
+        { role: 'user', content: 'Berapa 2+2?' },
+      ],
+      tools: [CALC_TOOL],
+      tool_choice: 'required',
+    },
+  });
+
+  const args = globalThis.__stubInferenceArgs[0];
+  // Kebijakan tool selalu ditambahkan server, tidak bisa ditimpa system prompt klien
+  assert.match(args.extraSystemPrompt, /KEBIJAKAN TOOL/);
+  const systemMessage = args.messages.find((message) => message.role === 'system');
+  assert.equal(systemMessage.content, 'Gaya: ringkas.');
 });
 
 test('error 404 menyertakan daftar endpoint termasuk tools', async () => {

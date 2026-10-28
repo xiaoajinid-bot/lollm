@@ -1140,6 +1140,17 @@
             <span class="switch-track"></span>
           </span>
         </div>
+        <div class="tool-panel-toggle">
+          <label class="field-label" for="toolFirst">Selalu pakai tool</label>
+          <span class="switch">
+            <input type="checkbox" id="toolFirst" checked />
+            <span class="switch-track"></span>
+          </span>
+        </div>
+        <div class="warmup-hint" id="toolFirstHint">
+          Putaran pertama wajib memanggil tool yang relevan (<code>tool_choice: required</code>)
+          sebelum menjawab. Matikan bila ingin model bebas menjawab tanpa tool.
+        </div>
         <div class="tool-list" id="toolList"></div>
         <div class="tool-meta">
           <label for="toolRounds">Maks. putaran</label>
@@ -1156,7 +1167,9 @@
           <span>Parameter Inferensi</span>
         </div>
         <label class="field-label" for="systemPromptInput">System Prompt</label>
-        <textarea id="systemPromptInput" rows="3" class="text-input">Kamu adalah asisten AI lokal yang berjalan langsung di dalam Serverless Function Vercel menggunakan mesin llama.cpp (GGUF CPU) tanpa API pihak ketiga. Jawablah dengan jelas, akurat, ramah, dan terstruktur.</textarea>
+        <textarea id="systemPromptInput" rows="3" class="text-input">Kamu adalah asisten AI lokal yang berjalan langsung di dalam Serverless Function Vercel menggunakan mesin llama.cpp (GGUF CPU) tanpa API pihak ketiga. Jawablah dengan jelas, akurat, ramah, dan terstruktur.
+
+Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, status server, connector), panggil tool itu lebih dulu dan jawab berdasarkan hasilnya. Jangan mengarang angka, tanggal, atau isi web. Untuk jawaban panjang, tulis selengkap mungkin sampai selesai.</textarea>
 
         <div class="slider-group">
           <div class="slider-header">
@@ -1169,9 +1182,13 @@
         <div class="slider-group">
           <div class="slider-header">
             <span>Max Tokens</span>
-            <span id="maxTokensVal">384</span>
+            <span id="maxTokensVal">3072</span>
           </div>
-          <input type="range" id="maxTokensSlider" min="64" max="1024" step="32" value="384" />
+          <input type="range" id="maxTokensSlider" min="256" max="8192" step="256" value="3072" />
+          <div class="warmup-hint">
+            Batas panjang jawaban. Konteks model 8192 token (bisa diatur lewat env
+            <code>LLM_CONTEXT_SIZE</code>); nilai efektif dibatasi sisa konteks di server.
+          </div>
         </div>
       </section>
     </aside>
@@ -1343,6 +1360,7 @@
       healthUpdated: document.getElementById('healthUpdated'),
       telemetryAge: document.getElementById('telemetryAge'),
       toolsEnabled: document.getElementById('toolsEnabled'),
+      toolFirst: document.getElementById('toolFirst'),
       chatModelBar: document.getElementById('chatModelBar'),
       storeStatusText: document.getElementById('storeStatusText'),
       storeRefreshBtn: document.getElementById('storeRefreshBtn'),
@@ -1884,7 +1902,8 @@
             ...(selectedTools.length
               ? {
                   tools: selectedTools,
-                  tool_choice: 'auto',
+                  // "Selalu pakai tool": putaran pertama wajib memanggil tool.
+                  tool_choice: els.toolFirst?.checked === false ? 'auto' : 'required',
                   max_tool_rounds: toolState.maxRounds,
                 }
               : {}),

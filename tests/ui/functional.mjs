@@ -580,6 +580,43 @@ async function createApp({ mobile = false, chat = {}, store = null, confirm = tr
   assert('model bar: model terpilih dikirim ke server', body.model === 'smollm2-360m-instruct', body.model);
 }
 
+/* 6d. Kontrol panjang output & "Selalu pakai tool" */
+{
+  const { doc, window, calls } = await createApp();
+  const slider = doc.getElementById('maxTokensSlider');
+  const toolFirst = doc.getElementById('toolFirst');
+
+  assert('kontrol: slider max tokens default 3072', slider.value === '3072', slider.value);
+  assert('kontrol: slider max tokens menjangkau 8192', slider.max === '8192', slider.max);
+  assert('kontrol: label default selaras slider', doc.getElementById('maxTokensVal').textContent === '3072');
+
+  slider.value = '6144';
+  slider.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert('kontrol: label mengikuti slider', doc.getElementById('maxTokensVal').textContent === '6144');
+
+  assert('kontrol: "Selalu pakai tool" aktif secara default', toolFirst.checked === true);
+  assert(
+    'kontrol: system prompt default menyebut prioritas tool',
+    /Prioritaskan tool/.test(doc.getElementById('systemPromptInput').value)
+  );
+
+  doc.getElementById('promptInput').value = 'Berapa 12 * 7?';
+  doc.getElementById('chatForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await waitFor(() => doc.getElementById('sendBtn').disabled === false, { timeout: 4000 });
+
+  const withTool = JSON.parse(calls.filter((c) => c.url === '/v1/chat/completions').at(-1).body);
+  assert('kontrol: tool_choice required saat toggle aktif', withTool.tool_choice === 'required', withTool.tool_choice);
+  assert('kontrol: max_tokens dari slider ikut terkirim', withTool.max_tokens === 6144, String(withTool.max_tokens));
+
+  toolFirst.checked = false;
+  doc.getElementById('promptInput').value = 'Halo lagi';
+  doc.getElementById('chatForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await waitFor(() => doc.getElementById('sendBtn').disabled === false, { timeout: 4000 });
+
+  const withoutTool = JSON.parse(calls.filter((c) => c.url === '/v1/chat/completions').at(-1).body);
+  assert('kontrol: tool_choice auto saat toggle mati', withoutTool.tool_choice === 'auto', withoutTool.tool_choice);
+}
+
 /* 7. Drawer mobile */
 {
   const { doc, window } = await createApp({ mobile: true });
