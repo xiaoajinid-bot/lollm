@@ -12,20 +12,85 @@
     {
       "source": "/(v1|api)/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With" }
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, X-Requested-With"
+        }
       ]
     }
   ],
   "rewrites": [
-    { "source": "/v1/chat/completions", "destination": "/api/llm?__route=v1/chat/completions" },
-    { "source": "/v1/models", "destination": "/api/llm?__route=v1/models" },
-    { "source": "/api/chat", "destination": "/api/llm?__route=v1/chat/completions" },
-    { "source": "/api/models", "destination": "/api/llm?__route=v1/models" },
-    { "source": "/api/health", "destination": "/api/llm?__route=api/health" },
-    { "source": "/api/warmup", "destination": "/api/llm?__route=api/warmup" },
-    { "source": "/api/tags", "destination": "/api/llm?__route=api/tags" },
-    { "source": "/api/generate", "destination": "/api/llm?__route=api/generate" }
+    {
+      "source": "/v1/utcp",
+      "destination": "/api/llm?__route=api/utcp"
+    },
+    {
+      "source": "/api/utcp",
+      "destination": "/api/llm?__route=api/utcp"
+    },
+    {
+      "source": "/api/utcp/call",
+      "destination": "/api/llm?__route=api/utcp/call"
+    },
+    {
+      "source": "/api/utcp/discover",
+      "destination": "/api/llm?__route=api/utcp/discover"
+    },
+    {
+      "source": "/api/utcp/manual",
+      "destination": "/api/llm?__route=api/utcp/manual"
+    },
+    {
+      "source": "/.well-known/utcp",
+      "destination": "/api/llm?__route=.well-known/utcp"
+    },
+    {
+      "source": "/v1/chat/completions",
+      "destination": "/api/llm?__route=v1/chat/completions"
+    },
+    {
+      "source": "/v1/models",
+      "destination": "/api/llm?__route=v1/models"
+    },
+    {
+      "source": "/api/chat",
+      "destination": "/api/llm?__route=v1/chat/completions"
+    },
+    {
+      "source": "/v1/tools",
+      "destination": "/api/llm?__route=api/tools"
+    },
+    {
+      "source": "/api/tools",
+      "destination": "/api/llm?__route=api/tools"
+    },
+    {
+      "source": "/api/models",
+      "destination": "/api/llm?__route=v1/models"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/llm?__route=api/health"
+    },
+    {
+      "source": "/api/warmup",
+      "destination": "/api/llm?__route=api/warmup"
+    },
+    {
+      "source": "/api/tags",
+      "destination": "/api/llm?__route=api/tags"
+    },
+    {
+      "source": "/api/generate",
+      "destination": "/api/llm?__route=api/generate"
+    }
   ]
 }

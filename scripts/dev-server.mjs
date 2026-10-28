@@ -32,7 +32,11 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(requestUrl.pathname);
 
-  if (pathname.startsWith('/api/') || pathname.startsWith('/v1/')) {
+  if (
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/v1/') ||
+    pathname.startsWith('/.well-known/')
+  ) {
     await apiModule.default(req, res);
     return;
   }
