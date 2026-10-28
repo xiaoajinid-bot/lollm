@@ -1718,17 +1718,21 @@
         .replace(/>/g, '&gt;');
     }
 
+    /* Format inline hanya untuk teks biasa; isi <pre> harus tetap apa adanya */
+    function renderInline(text) {
+      return text
+        .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    }
+
     function renderMarkdown(text) {
       if (!text) return '<span style="color:#64748b">...</span>';
-      let html = escapeHtml(text);
 
-      html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, _lang, code) => {
+      const html = escapeHtml(text).replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, _lang, code) => {
         return `<pre><code>${code.trimEnd()}</code></pre>`;
       });
 
-      html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
+      /* Blok kode dipisah lebih dulu supaya ** dan ` di dalamnya tidak diformat */
       const parts = html.split(/(<pre>[\s\S]*?<\/pre>)/g);
       return parts
         .map((part) => {
@@ -1737,7 +1741,7 @@
             .trim()
             .split(/\n{2,}/)
             .filter(Boolean)
-            .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+            .map((p) => `<p>${renderInline(p).replace(/\n/g, '<br/>')}</p>`)
             .join('');
         })
         .join('');
@@ -1769,14 +1773,29 @@
       }
     }
 
-    function flashButtonLabel(button, defaultValue, ok) {
-      if (!button) return;
-      const previous = button.textContent || defaultValue;
-      button.textContent = ok ? 'Tersalin!' : 'Gagal menyalin';
-      clearTimeout(button._flashTimer);
-      button._flashTimer = setTimeout(() => {
-        button.textContent = previous;
+    /*
+     * Label asli disimpan sekali di WeakMap. Sebelumnya label diambil dari
+     * textContent saat diklik, sehingga klik kedua (saat masih menampilkan
+     * "Tersalin!") membuat label asli hilang dan tidak pernah pulih.
+     */
+    const originalLabels = new WeakMap();
+
+    function flashLabel(element, fallbackText, text) {
+      if (!element) return;
+      let original = originalLabels.get(element);
+      if (original === undefined) {
+        original = element.textContent || fallbackText || '';
+        originalLabels.set(element, original);
+      }
+      element.textContent = text;
+      clearTimeout(element._flashTimer);
+      element._flashTimer = setTimeout(() => {
+        element.textContent = original;
       }, 1500);
+    }
+
+    function flashButtonLabel(button, defaultValue, ok) {
+      flashLabel(button, defaultValue, ok ? 'Tersalin!' : 'Gagal menyalin');
     }
 
     function populateSnippets() {
@@ -2342,7 +2361,13 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
     });
 
     els.toolRounds.addEventListener('change', () => {
-      const value = Math.max(1, Math.min(4, Math.round(Number(els.toolRounds.value) || 2)));
+      const raw = els.toolRounds.value.trim();
+      const parsed = Number(raw);
+      /* Kosong / bukan angka -> nilai bawaan 2; angka 0 tetap di-clamp ke batas min=1 */
+      const value =
+        raw === '' || !Number.isFinite(parsed)
+          ? 2
+          : Math.max(1, Math.min(4, Math.round(parsed)));
       toolState.maxRounds = value;
       els.toolRounds.value = String(value);
       saveToolPrefs();
@@ -2602,11 +2627,11 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
 
     els.publicDomainChip.addEventListener('click', async () => {
       const ok = await copyText(window.location.origin);
-      const prev = els.domainText.textContent;
-      els.domainText.textContent = ok ? 'Tersalin!' : 'Gagal menyalin';
-      setTimeout(() => {
-        els.domainText.textContent = prev;
-      }, 1500);
+      flashLabel(
+        els.domainText,
+        window.location.host || 'preview',
+        ok ? 'Tersalin!' : 'Gagal menyalin'
+      );
     });
 
     els.copyBaseUrlBtn.addEventListener('click', async () => {
