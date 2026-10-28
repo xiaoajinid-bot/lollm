@@ -91,7 +91,7 @@ test('tool server dieksekusi lalu jawaban final dihasilkan', async () => {
   assert.deepEqual(toolEvents, [['call', 'calculate'], ['result', true]]);
 
   // Prompt tool benar-benar disuntikkan pada putaran pertama
-  assert.match(runInference.calls[0].extraSystemPrompt, /TOOL CALLING/);
+  assert.match(runInference.calls[0].extraSystemPrompt, /KEBIJAKAN TOOL/);
   assert.match(runInference.calls[0].extraSystemPrompt, /calculate/);
 
   // Hasil tool diteruskan kembali ke model sebagai pesan role "tool"
@@ -258,4 +258,72 @@ test('tanpa messages/prompt agent melempar 400', async () => {
     () => runToolAgent({ runInference: async () => ({ text: '' }) }),
     (err) => err.statusCode === 400
   );
+});
+
+test('nudge: permintaan berdata memaksa koreksi bila model menjawab tanpa tool', async () => {
+  const runInference = scriptedInference([
+    'Kira-kira sore.', // putaran 1: tidak memanggil tool
+    '<tool_call>{"name":"calculate","arguments":{"expression":"7+3"}}</tool_call>', // koreksi
+    'Hasilnya 10.',
+  ]);
+
+  const streamed = [];
+  const result = await runToolAgent({
+    messages: [{ role: 'user', content: 'Jam berapa sekarang dan berapa 7+3?' }],
+    tools: [CALC_TOOL],
+    runInference,
+    onTextChunk: (chunk) => streamed.push(chunk),
+  });
+
+  assert.equal(runInference.calls.length, 3, 'putaran 1 + koreksi + jawaban final');
+  assert.equal(result.trace.length, 1);
+  assert.equal(result.trace[0].name, 'calculate');
+
+  const text = streamed.join('');
+  assert.ok(!text.includes('Kira-kira sore.'), 'teks putaran pertama yang dibuang tidak boleh tampil');
+  assert.ok(text.includes('Hasilnya 10.'));
+  assert.match(runInference.calls[1].extraSystemPrompt, /WAJIB memanggil/);
+});
+
+test('nudge: bila model tetap menolak, jawaban asli tetap ditampilkan', async () => {
+  const runInference = scriptedInference(['Sekitar sore.', 'Saya tidak punya tool.']);
+
+  const streamed = [];
+  const result = await runToolAgent({
+    messages: [{ role: 'user', content: 'Jam berapa sekarang?' }],
+    tools: [CALC_TOOL],
+    runInference,
+    onTextChunk: (chunk) => streamed.push(chunk),
+  });
+
+  assert.equal(runInference.calls.length, 2);
+  assert.deepEqual(result.toolCalls, []);
+  assert.equal(result.trace.length, 0);
+  assert.ok(streamed.join('').includes('Sekitar sore.'), 'jawaban asli harus ditampilkan');
+});
+
+test('nudge: sapaan tidak memaksa tool', async () => {
+  const runInference = scriptedInference(['Halo! Ada yang bisa dibantu?']);
+  const result = await runToolAgent({
+    messages: [{ role: 'user', content: 'Halo, apa kabar?' }],
+    tools: [CALC_TOOL],
+    runInference,
+  });
+
+  assert.equal(runInference.calls.length, 1, 'tanpa putaran koreksi');
+  assert.equal(result.trace.length, 0);
+  assert.match(result.text, /Halo!/);
+});
+
+test('nudge: LLM_TOOL_FIRST=off mematikan koreksi otomatis', async () => {
+  const runInference = scriptedInference(['Sekitar sore.']);
+  const result = await runToolAgent({
+    messages: [{ role: 'user', content: 'Jam berapa sekarang?' }],
+    tools: [CALC_TOOL],
+    env: { LLM_TOOL_FIRST: 'off' },
+    runInference,
+  });
+
+  assert.equal(runInference.calls.length, 1);
+  assert.equal(result.trace.length, 0);
 });

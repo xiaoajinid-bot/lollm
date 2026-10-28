@@ -73,7 +73,7 @@ curl -s https://lokal-llm.vercel.app/v1/chat/completions \
       {"role": "user", "content": "Halo! Jelaskan singkat keuntungan Local LLM."}
     ],
     "temperature": 0.65,
-    "max_tokens": 256
+    "max_tokens": 2048
   }'
 ```
 
@@ -148,10 +148,43 @@ mis. `models/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`.
 | `LLM_S3_FORCE_PATH_STYLE` | `true` untuk endpoint kustom | Path-style (`endpoint/bucket/key`) — wajib untuk R2/MinIO |
 | `LLM_S3_PUBLIC_BASE_URL` | – | Alternatif tanpa kredensial: base URL CDN/publik |
 | `LLM_S3_PRESIGN_TTL` | `900` | Masa berlaku presigned URL (detik, 60–604800) |
-| `LLM_BLOB_BASE_URL` | – | Base URL store Vercel Blob (`https://<store>.public.blob.vercel-storage.com`) |
+| `LLM_BLOB_BASE_URL` | diturunkan otomatis | Base URL store Blob. Kosong = `https://<store-id>.public.blob.vercel-storage.com` dari `BLOB_STORE_ID` |
+| `BLOB_STORE_ID` | otomatis (integrasi Vercel) | Store ID Blob; dipakai menurunkan base URL publik/privat |
+| `LLM_CONTEXT_SIZE` | `8192` | Ukuran konteks (token), batas atas `16384`. Model ≥ 700 MB otomatis dibatasi `4096` |
+| `LLM_MAX_OUTPUT_TOKENS` | `3072` | Batas token keluaran, batas atas `8192`; efektif dibatasi sisa konteks |
 | `BLOB_READ_WRITE_TOKEN` | otomatis | Token Blob; dipakai hanya jika `LLM_BLOB_PRIVATE=true` |
 | `LLM_BLOB_PRIVATE` | `false` | Kirim header `Authorization: Bearer <token>` saat mengambil blob privat |
 | `LLM_MODEL_BASE_URL` | – | Base URL generik/CDN: `<base>/<nama-file>.gguf` |
+
+### Batas panjang jawaban
+
+Jawaban panjang (menulis kode, merangkum hasil tool) butuh dua hal: konteks yang
+cukup dan `max_tokens` yang tidak dipotong kecil.
+
+- **Konteks** — `contextSize` yang dipakai `llama.cpp` dihitung oleh
+  `getContextSize()` (`lib/model-limits.mjs`): nilai terbesar antara kebutuhan
+  katalog, `LLM_CONTEXT_SIZE`, dan default `8192`, lalu dibatasi `16384`. Model
+  besar (≥ 700 MB, mis. 1B) otomatis dibatasi `4096` supaya model + KV cache
+  tetap muat di RAM function; set `LLM_CONTEXT_SIZE` eksplisit bila ingin menimpa.
+- **Keluaran** — default `3072` token (`LLM_MAX_OUTPUT_TOKENS`), batas atas
+  `8192`. Nilai efektif selalu dibatasi sisa konteks: maksimum
+  `konteks − max(512, 25% konteks)` agar prompt + riwayat + hasil tool tetap muat.
+- **Riwayat** — `fitHistoryToContext()` membuang giliran terlama bila total
+  prompt melebihi anggaran konteks; giliran terbaru dan system prompt selalu
+  dipertahankan (sebelumnya riwayat bisa memicu overflow pada konteks 2048).
+- **UI** — slider *Max Tokens* di sidebar menjangkau `256–8192` (default `3072`)
+  dan nilainya dikirim sebagai `max_tokens`; server tetap melakukan clamp.
+
+Contoh meminta jawaban panjang lewat API:
+
+```bash
+curl -s https://lokal-llm.vercel.app/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "Tulis modul Python lengkap untuk antrean tugas."}],
+    "max_tokens": 4096
+  }'
+```
 
 ### Contoh: Cloudflare R2
 
@@ -344,6 +377,15 @@ klien OpenAI standar, dan blok JSON panggilan tool tidak pernah muncul sebagai i
    lalu model melanjutkan generasi (maksimum `max_tool_rounds`, default 3, batas 6).
 4. Tool yang **tidak** dikenal server dianggap milik client → respons berhenti dengan
    `finish_reason: "tool_calls"` + `message.tool_calls`, dan client yang mengeksekusi.
+
+**Tool-first (default aktif).** Server selalu menyuntikkan `TOOL_AGENT_POLICY` ke
+system prompt, jadi aturan "pakai tool lebih dulu" tidak bisa ditimpa system prompt
+klien. Bila klien mengirim `tool_choice: "auto"` tetapi pertanyaan jelas butuh data
+(angka, jam/tanggal, cuaca, pencarian, status server, URL), putaran pertama dipaksa
+memanggil tool (`required`) dan teks putaran itu ditahan sampai keputusan tool
+keluar. Kalau model tetap menolak, jawaban aslinya yang ditampilkan (bukan error).
+Matikan dengan env `LLM_TOOL_FIRST=off`. Di Web UI, toggle **Selalu pakai tool**
+(default ON) mengirim `tool_choice: "required"` dari browser.
 
 ### Tool bawaan
 

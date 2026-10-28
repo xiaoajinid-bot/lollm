@@ -8,6 +8,7 @@ import {
   runChatInference,
 } from '../lib/llm-engine.mjs';
 import { executeToolCall, getToolRegistry, listTools } from '../lib/tools.mjs';
+import { DEFAULT_MAX_OUTPUT_TOKENS } from '../lib/model-limits.mjs';
 import {
   describeModelStorage,
   modelSourcePlan,
@@ -563,7 +564,7 @@ export default async function handler(req, res) {
       const temperature = body.temperature ?? 0.65;
       const topP = body.top_p ?? body.topP ?? 0.9;
       const maxTokens =
-        body.max_tokens ?? body.max_completion_tokens ?? body.maxTokens ?? 384;
+        body.max_tokens ?? body.max_completion_tokens ?? body.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
       const { tools, functions, toolChoice, maxRounds } = readToolConfig(body);
 
@@ -796,7 +797,7 @@ export default async function handler(req, res) {
           modelId: requestedModel,
           messages,
           temperature: body.options?.temperature ?? 0.65,
-          maxTokens: body.options?.num_predict ?? 384,
+          maxTokens: body.options?.num_predict ?? DEFAULT_MAX_OUTPUT_TOKENS,
           signal: abortController.signal,
           onTokenChunk(chunk) {
             if (!res.writableEnded) {
@@ -832,7 +833,7 @@ export default async function handler(req, res) {
         modelId: requestedModel,
         messages,
         temperature: body.options?.temperature ?? 0.65,
-        maxTokens: body.options?.num_predict ?? 384,
+        maxTokens: body.options?.num_predict ?? DEFAULT_MAX_OUTPUT_TOKENS,
         signal: abortController.signal,
       });
 
