@@ -2,7 +2,14 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+  />
+  <meta name="theme-color" content="#141218" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="format-detection" content="telephone=no" />
   <title>Local LLM on Vercel — llama.cpp GGUF Serverless & Public API</title>
   <style>
     :root {
@@ -748,11 +755,239 @@
       .tester-btns .secondary-btn { padding: 7px 9px; font-size: 10px; }
       .code-block { padding: 12px; font-size: 10.5px; }
     }
+
+    /* ===================================================================
+       Mobile drawer + Android compatibility patch
+       =================================================================== */
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    html,
+    body {
+      overscroll-behavior: none;
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+    }
+    button,
+    .tab-btn,
+    .model-card,
+    .starter-card,
+    .public-domain-chip,
+    input[type="range"] {
+      touch-action: manipulation;
+    }
+
+    /* Tinggi shell mengikuti viewport dinamis (URL bar & keyboard Android) */
+    .app-shell,
+    .main-area {
+      height: 100vh;
+    }
+    .app-shell,
+    .main-area {
+      height: var(--app-height, 100dvh);
+    }
+
+    /* Tombol tutup drawer: hanya tampil di layar kecil */
+    .sidebar-close {
+      display: none;
+      position: absolute;
+      top: max(10px, env(safe-area-inset-top, 0px));
+      right: 10px;
+      z-index: 2;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .sidebar-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+
+    /* Teks panjang (URL/hash) tidak boleh melebar melewati bubble */
+    .msg-bubble {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .msg-bubble pre,
+    .code-block {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+    }
+
+    @media (max-width: 860px) {
+      html,
+      body {
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+
+      .sidebar {
+        z-index: 50;
+        padding-top: max(16px, env(safe-area-inset-top, 0px));
+        padding-right: max(12px, env(safe-area-inset-right, 0px));
+        padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+        padding-left: max(12px, env(safe-area-inset-left, 0px));
+        visibility: hidden;
+        transition: transform 0.22s ease, visibility 0.22s ease, box-shadow 0.22s ease;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+      .sidebar.open {
+        visibility: visible;
+      }
+      .sidebar.dragging {
+        transition: none;
+      }
+      .sidebar-close {
+        display: grid;
+      }
+      .brand {
+        padding-right: 52px;
+      }
+      /* Cegah halaman di belakang drawer ikut ter-scroll (Android) */
+      body.sidebar-open {
+        overflow: hidden;
+      }
+
+      .topbar {
+        height: calc(64px + env(safe-area-inset-top, 0px));
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-left: max(14px, env(safe-area-inset-left, 0px));
+        padding-right: max(14px, env(safe-area-inset-right, 0px));
+      }
+      .progress-banner {
+        padding-left: max(14px, env(safe-area-inset-left, 0px));
+        padding-right: max(14px, env(safe-area-inset-right, 0px));
+      }
+      .messages-container,
+      .api-docs-wrap {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* Target sentuh minimal 44px supaya nyaman di jari */
+      .mobile-menu-btn,
+      .icon-btn {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+      }
+      .copy-small-btn,
+      .tester-btns .secondary-btn,
+      .ghost-btn {
+        min-height: 40px;
+        padding-block: 8px;
+      }
+      .model-card {
+        min-height: 52px;
+      }
+      .tab-btn {
+        min-height: 40px;
+      }
+      .send-btn {
+        width: 44px;
+        height: 44px;
+      }
+
+      /* >=16px agar Android/iOS tidak auto-zoom saat fokus input */
+      #promptInput,
+      .text-input {
+        font-size: 16px;
+      }
+      .msg-bubble {
+        max-width: 92%;
+      }
+    }
+
+    /* Layar HP dalam posisi landscape (tinggi terbatas) */
+    @media (max-width: 900px) and (max-height: 480px) and (orientation: landscape) {
+      .topbar {
+        height: calc(52px + env(safe-area-inset-top, 0px));
+      }
+      .messages-container {
+        padding: 10px 14px;
+      }
+      .empty-state {
+        padding: 4px 0;
+        gap: 8px;
+      }
+      .empty-state h1 {
+        font-size: clamp(18px, 4vw, 22px);
+      }
+      .empty-state p {
+        display: none;
+      }
+      .composer {
+        padding-block: 6px;
+      }
+      .sidebar {
+        width: min(72vw, 340px);
+      }
+    }
+
+    /* Hover tidak "lengket" setelah tap di layar sentuh */
+    @media (hover: none) {
+      .starter-card:hover {
+        background: #2b2930;
+        transform: none;
+      }
+      .model-card:hover {
+        background: #211f26;
+      }
+      .model-card.selected:hover {
+        background: rgba(208, 188, 255, 0.12);
+      }
+      .icon-btn:hover,
+      .copy-small-btn:hover {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+      }
+      .ghost-btn:hover {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+      }
+      .secondary-btn:hover:not(:disabled) {
+        background: var(--bg-elevated);
+        border-color: transparent;
+      }
+      .send-btn:hover:not(:disabled) {
+        background: var(--accent);
+        color: #332b48;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="Panel pengaturan dan telemetri">
+      <button class="sidebar-close" id="sidebarCloseBtn" type="button" aria-label="Tutup menu">✕</button>
       <div class="brand">
         <div class="brand-icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -850,7 +1085,16 @@
     <main class="main-area">
       <header class="topbar">
         <div class="topbar-left">
-          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Buka menu">☰</button>
+          <button
+            class="mobile-menu-btn"
+            id="mobileMenuBtn"
+            type="button"
+            aria-label="Buka menu"
+            aria-controls="sidebar"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
           <div class="tab-switcher">
             <button class="tab-btn active" data-tab="chat">Chat</button>
             <button class="tab-btn" data-tab="api">Public API</button>
@@ -988,6 +1232,8 @@
         </div>
       </section>
     </main>
+
+    <div class="sidebar-scrim" id="sidebarScrim" aria-hidden="true"></div>
   </div>
 
   <script type="module">
@@ -1002,6 +1248,8 @@
     const els = {
       sidebar: document.getElementById('sidebar'),
       mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+      sidebarCloseBtn: document.getElementById('sidebarCloseBtn'),
+      sidebarScrim: document.getElementById('sidebarScrim'),
       serverStatusPill: document.getElementById('serverStatusPill'),
       regionTag: document.getElementById('regionTag'),
       ramMetric: document.getElementById('ramMetric'),
@@ -1049,6 +1297,11 @@
     let telemetryTimer = null;
     let telemetryBusy = false;
 
+    const mobileNavQuery = window.matchMedia('(max-width: 860px)');
+    const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
+    const isMobileNav = () => mobileNavQuery.matches;
+    const isSidebarOpen = () => els.sidebar.classList.contains('open');
+
     function escapeHtml(raw) {
       return String(raw)
         .replace(/&/g, '&amp;')
@@ -1079,6 +1332,42 @@
             .join('');
         })
         .join('');
+    }
+
+    /* navigator.clipboard tidak selalu tersedia (http, WebView, browser in-app Android) */
+    async function copyText(text) {
+      try {
+        if (window.isSecureContext && navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {
+        /* lanjut ke fallback */
+      }
+      try {
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.setAttribute('readonly', '');
+        helper.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+        document.body.appendChild(helper);
+        helper.select();
+        helper.setSelectionRange(0, text.length);
+        const copied = document.execCommand('copy');
+        helper.remove();
+        return copied;
+      } catch {
+        return false;
+      }
+    }
+
+    function flashButtonLabel(button, defaultValue, ok) {
+      if (!button) return;
+      const previous = button.textContent || defaultValue;
+      button.textContent = ok ? 'Tersalin!' : 'Gagal menyalin';
+      clearTimeout(button._flashTimer);
+      button._flashTimer = setTimeout(() => {
+        button.textContent = previous;
+      }, 1500);
     }
 
     function populateSnippets() {
@@ -1250,8 +1539,20 @@ console.log(data.choices[0].message.content);`;
 
     function startRealtimeTelemetry() {
       clearInterval(telemetryTimer);
+      telemetryTimer = null;
+      if (document.hidden) return; // hemat baterai & kuota saat aplikasi di background
       telemetryTimer = setInterval(refreshTelemetry, 3000);
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(telemetryTimer);
+        telemetryTimer = null;
+        return;
+      }
+      refreshTelemetry();
+      startRealtimeTelemetry();
+    });
 
     function showProgress(text, percent = 0) {
       els.progressBanner.classList.remove('hidden');
@@ -1446,10 +1747,32 @@ console.log(data.choices[0].message.content);`;
     });
 
     els.promptInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendChatMessage(els.promptInput.value);
-      }
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+      // Di keyboard sentuh Android, Enter = baris baru; kirim lewat tombol ↑
+      if (coarsePointerQuery.matches) return;
+      e.preventDefault();
+      sendChatMessage(els.promptInput.value);
+    });
+
+    function syncComposerHint() {
+      els.promptInput.placeholder = coarsePointerQuery.matches
+        ? 'Ketik pesan ke Local LLM...'
+        : 'Ketik pesan ke Local LLM... (Enter untuk kirim, Shift+Enter baris baru)';
+    }
+    syncComposerHint();
+    if (coarsePointerQuery.addEventListener) {
+      coarsePointerQuery.addEventListener('change', syncComposerHint);
+    } else if (coarsePointerQuery.addListener) {
+      coarsePointerQuery.addListener(syncComposerHint);
+    }
+
+    // Saat keyboard Android terbuka, pastikan pesan terakhir & kolom input tetap terlihat
+    els.promptInput.addEventListener('focus', () => {
+      syncViewportHeight();
+      setTimeout(() => {
+        syncViewportHeight();
+        els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+      }, 280);
     });
 
     els.promptInput.addEventListener('input', () => {
@@ -1516,37 +1839,205 @@ console.log(data.choices[0].message.content);`;
       });
     });
 
-    els.mobileMenuBtn.addEventListener('click', () => {
-      els.sidebar.classList.toggle('open');
+    /* ---------------------------------------------------------------
+       Drawer navigasi mobile: bisa ditutup lewat tombol ✕, tap backdrop,
+       tombol Escape, geser ke kiri, dan otomatis tertutup saat layar melebar.
+       --------------------------------------------------------------- */
+    /* Tombol Back Android menutup drawer, bukan meninggalkan halaman */
+    let sidebarHistoryPushed = false;
+
+    function pushSidebarHistory() {
+      if (sidebarHistoryPushed) return;
+      try {
+        history.pushState({ __sidebarOpen: true }, '');
+        sidebarHistoryPushed = true;
+      } catch {
+        /* history tidak tersedia: abaikan */
+      }
+    }
+
+    function popSidebarHistory() {
+      if (!sidebarHistoryPushed) return;
+      sidebarHistoryPushed = false;
+      try {
+        history.back();
+      } catch {
+        /* abaikan */
+      }
+    }
+
+    window.addEventListener('popstate', () => {
+      if (!isSidebarOpen()) return;
+      sidebarHistoryPushed = false;
+      setSidebarOpen(false, { syncHistory: false, restoreFocus: true });
     });
 
+    function setSidebarOpen(open, { restoreFocus = false, syncHistory = true } = {}) {
+      const wasOpen = isSidebarOpen();
+      const next = Boolean(open) && isMobileNav();
+
+      els.sidebar.classList.toggle('open', next);
+      els.sidebar.classList.remove('dragging');
+      els.sidebar.style.removeProperty('transform');
+      document.body.classList.toggle('sidebar-open', next);
+      els.mobileMenuBtn.setAttribute('aria-expanded', String(next));
+      els.mobileMenuBtn.setAttribute('aria-label', next ? 'Tutup menu' : 'Buka menu');
+
+      if (syncHistory) {
+        if (next && !wasOpen) pushSidebarHistory();
+        else if (!next && wasOpen) popSidebarHistory();
+      }
+
+      if (next) {
+        els.sidebarCloseBtn.focus?.({ preventScroll: true });
+      } else if (restoreFocus && isMobileNav()) {
+        els.mobileMenuBtn.focus?.({ preventScroll: true });
+      }
+    }
+
+    const closeSidebar = (options) => setSidebarOpen(false, options);
+
+    els.mobileMenuBtn.addEventListener('click', () => setSidebarOpen(!isSidebarOpen()));
+    els.sidebarCloseBtn.addEventListener('click', () => closeSidebar({ restoreFocus: true }));
+    els.sidebarScrim.addEventListener('click', () => closeSidebar());
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && isSidebarOpen()) {
+        closeSidebar({ restoreFocus: true });
+      }
+    });
+
+    /* Setelah memilih model atau memuat model, drawer ditutup agar hasilnya terlihat */
+    els.sidebar.addEventListener('click', (event) => {
+      if (!isMobileNav() || !isSidebarOpen()) return;
+      if (event.target.closest('.model-card, #warmupBtn')) {
+        setTimeout(() => closeSidebar(), 150);
+      }
+    });
+
+    /* Geser ke kiri untuk menutup drawer (kebiasaan pengguna Android) */
+    let drawerTouch = null;
+
+    els.sidebar.addEventListener(
+      'touchstart',
+      (event) => {
+        if (!isMobileNav() || !isSidebarOpen() || event.touches.length !== 1) {
+          drawerTouch = null;
+          return;
+        }
+        const touch = event.touches[0];
+        drawerTouch = { startX: touch.clientX, startY: touch.clientY, dx: 0, dragging: false };
+      },
+      { passive: true }
+    );
+
+    els.sidebar.addEventListener(
+      'touchmove',
+      (event) => {
+        if (!drawerTouch || event.touches.length !== 1) return;
+        const touch = event.touches[0];
+        const dx = touch.clientX - drawerTouch.startX;
+        const dy = touch.clientY - drawerTouch.startY;
+
+        if (!drawerTouch.dragging) {
+          if (Math.abs(dx) < 8) return;
+          if (Math.abs(dx) <= Math.abs(dy)) {
+            drawerTouch = null; // gerakan vertikal: biarkan panel ter-scroll
+            return;
+          }
+          drawerTouch.dragging = true;
+          els.sidebar.classList.add('dragging');
+        }
+
+        drawerTouch.dx = Math.min(0, dx);
+        const width = els.sidebar.offsetWidth || 1;
+        const progress = Math.min(1, Math.abs(drawerTouch.dx) / width);
+        els.sidebar.style.transform = `translateX(${-progress * 100}%)`;
+      },
+      { passive: true }
+    );
+
+    function endDrawerDrag() {
+      if (!drawerTouch) return;
+      const { dragging, dx } = drawerTouch;
+      drawerTouch = null;
+      if (!dragging) return;
+
+      els.sidebar.classList.remove('dragging');
+      els.sidebar.style.removeProperty('transform');
+
+      const width = els.sidebar.offsetWidth || 1;
+      if (Math.abs(dx) > Math.min(90, width * 0.35)) {
+        closeSidebar();
+      }
+    }
+
+    els.sidebar.addEventListener('touchend', endDrawerDrag, { passive: true });
+    els.sidebar.addEventListener('touchcancel', endDrawerDrag, { passive: true });
+
+    function onNavQueryChange(event) {
+      if (!event.matches) {
+        els.sidebar.classList.remove('open', 'dragging');
+        els.sidebar.style.removeProperty('transform');
+        document.body.classList.remove('sidebar-open');
+        els.mobileMenuBtn.setAttribute('aria-expanded', 'false');
+        els.mobileMenuBtn.setAttribute('aria-label', 'Buka menu');
+      }
+    }
+    if (mobileNavQuery.addEventListener) mobileNavQuery.addEventListener('change', onNavQueryChange);
+    else if (mobileNavQuery.addListener) mobileNavQuery.addListener(onNavQueryChange);
+
+    /* Tinggi aplikasi mengikuti visual viewport: URL bar & keyboard Android tidak memotong UI */
+    function syncViewportHeight() {
+      const root = document.documentElement;
+      if (!isMobileNav()) {
+        root.style.removeProperty('--app-height');
+        return;
+      }
+      const viewport = window.visualViewport;
+      // Jangan ubah layout saat pengguna melakukan pinch-zoom
+      if (viewport && viewport.scale > 1.01) return;
+      const height = viewport ? viewport.height : window.innerHeight;
+      if (height > 0) root.style.setProperty('--app-height', `${Math.round(height)}px`);
+    }
+
+    let viewportRaf = 0;
+    function scheduleViewportSync() {
+      if (viewportRaf) return;
+      viewportRaf = requestAnimationFrame(() => {
+        viewportRaf = 0;
+        syncViewportHeight();
+      });
+    }
+
+    syncViewportHeight();
+    window.addEventListener('resize', scheduleViewportSync);
+    window.addEventListener('orientationchange', () => setTimeout(syncViewportHeight, 150));
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', scheduleViewportSync);
+      window.visualViewport.addEventListener('scroll', scheduleViewportSync);
+    }
+
     els.publicDomainChip.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(window.location.origin);
+      const ok = await copyText(window.location.origin);
       const prev = els.domainText.textContent;
-      els.domainText.textContent = 'Tersalin!';
+      els.domainText.textContent = ok ? 'Tersalin!' : 'Gagal menyalin';
       setTimeout(() => {
         els.domainText.textContent = prev;
-      }, 1200);
+      }, 1500);
     });
 
     els.copyBaseUrlBtn.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(`${window.location.origin}/v1`);
-      els.copyBaseUrlBtn.textContent = 'Tersalin!';
-      setTimeout(() => {
-        els.copyBaseUrlBtn.textContent = 'Salin';
-      }, 1200);
+      const ok = await copyText(`${window.location.origin}/v1`);
+      flashButtonLabel(els.copyBaseUrlBtn, 'Salin', ok);
     });
 
     document.querySelectorAll('[data-copy-target]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const targetId = btn.getAttribute('data-copy-target');
         const code = document.getElementById(targetId)?.textContent || '';
-        await navigator.clipboard.writeText(code);
-        const orig = btn.textContent;
-        btn.textContent = 'Tersalin!';
-        setTimeout(() => {
-          btn.textContent = orig;
-        }, 1200);
+        const ok = await copyText(code);
+        flashButtonLabel(btn, 'Salin Kode', ok);
       });
     });
 
