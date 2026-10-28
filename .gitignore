@@ -8,3 +8,6 @@ node_modules
 .next/
 .env*.local
 .DS_Store
+# Secrets lokal (aman untuk kredensial; .env sendiri hanya berisi kunci + default)
+.env.local
+.env.*.local

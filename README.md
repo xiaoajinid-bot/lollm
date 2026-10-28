@@ -99,6 +99,20 @@ for chunk in resp:
 
 ---
 
+## Konfigurasi Environment
+
+Repo ini menyertakan satu file **`.env`** (bukan `.env.example`) yang sudah memuat
+seluruh nama variabel yang dibaca kode: nilai default diisi, kredensial dikosongkan.
+
+- **Produksi (Vercel)** — Vercel **tidak** membaca `.env` dari repository. Ke-26 kunci
+  tersebut sudah didaftarkan di *Project Settings → Environment Variables* dengan
+  target `production`, `preview`, dan `development`; isi nilainya dari dashboard,
+  lalu redeploy agar berlaku.
+- **Lokal** — `npm run dev` memuat `.env` otomatis (Node ≥ 20.12). Pada Node lebih
+  lama: `node --env-file=.env scripts/dev-server.mjs`.
+- Jangan isi kredensial asli di `.env` bila repo ini publik; simpan di `.env.local`
+  (sudah di-ignore) atau langsung di dashboard Vercel.
+
 ## Penyimpanan Model (S3 / Vercel Blob)
 
 Secara default GGUF diunduh dari Hugging Face ke `/tmp` pada setiap cold start.
