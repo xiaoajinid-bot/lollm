@@ -29,6 +29,26 @@
   ],
   "rewrites": [
     {
+      "source": "/api/store/save",
+      "destination": "/api/llm?__route=api/store/save"
+    },
+    {
+      "source": "/api/store/delete",
+      "destination": "/api/llm?__route=api/store/delete"
+    },
+    {
+      "source": "/api/store",
+      "destination": "/api/llm?__route=api/store"
+    },
+    {
+      "source": "/api/storage/check",
+      "destination": "/api/llm?__route=api/storage/check"
+    },
+    {
+      "source": "/api/storage",
+      "destination": "/api/llm?__route=api/storage"
+    },
+    {
       "source": "/v1/utcp",
       "destination": "/api/llm?__route=api/utcp"
     },

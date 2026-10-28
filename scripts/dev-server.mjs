@@ -4,6 +4,26 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/* Muat .env lebih dulu supaya kredensial/opsi lokal terbaca, tanpa dependency. */
+const envFile = path.join(root, '.env');
+const hasEnvFile = await fs.access(envFile).then(
+  () => true,
+  () => false
+);
+if (hasEnvFile) {
+  if (typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile(envFile);
+      console.log('Memuat variabel environment dari .env');
+    } catch (err) {
+      console.warn(`.env gagal dimuat: ${err.message}`);
+    }
+  } else {
+    console.warn('Node < 20.12: jalankan dengan `node --env-file=.env scripts/dev-server.mjs`.');
+  }
+}
+
 const publicDir = path.join(root, 'public');
 const port = Number(process.env.PORT || 3000);
 const apiModule = await import(pathToFileURL(path.join(root, 'api', 'llm.mjs')));
