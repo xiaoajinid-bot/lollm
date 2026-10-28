@@ -21,6 +21,14 @@ import {
 } from '../lib/model-store.mjs';
 import { runToolAgent } from '../lib/agent.mjs';
 import {
+  buildResponseObject,
+  convertResponsesInput,
+  convertResponsesToolChoice,
+  convertResponsesTools,
+  createResponseStore,
+  createResponsesStream,
+} from '../lib/responses-api.mjs';
+import {
   UTCP_MANUAL_VERSION,
   UTCP_PROTOCOL_VERSION,
   buildOwnManual,
@@ -44,6 +52,9 @@ const AVAILABLE_ENDPOINTS = [
   'POST /api/store/save',
   'POST /api/store/delete',
   'POST /v1/chat/completions',
+  'POST /v1/responses',
+  'GET /v1/responses/{id}',
+  'DELETE /v1/responses/{id}',
   'GET /api/tools',
   'POST /api/tools',
   'GET /.well-known/utcp',
@@ -110,6 +121,9 @@ function readToolConfig(body) {
   const maxRounds = Number(maxRoundsRaw) > 0 ? Number(maxRoundsRaw) : undefined;
   return { tools, functions, toolChoice, maxRounds };
 }
+
+// Cache respons di memori instance (retrieve / previous_response_id).
+const responseStore = createResponseStore({ limit: 20 });
 
 function toolContext(utcpTools = []) {
   return { health: getSystemHealth, utcpTools };
@@ -767,6 +781,282 @@ export default async function handler(req, res) {
         timings: result.timings,
         ...(result.trace?.length ? { tool_trace: result.trace, tool_rounds: result.rounds } : {}),
       });
+      return;
+    }
+
+    // 7b. OpenAI Responses API (/v1/responses, /api/responses, /responses)
+    const isResponsesRoute =
+      route === '/v1/responses' ||
+      route === '/api/responses' ||
+      route === '/responses' ||
+      route.startsWith('/v1/responses/') ||
+      route.startsWith('/api/responses/') ||
+      route.startsWith('/responses/');
+
+    if (isResponsesRoute) {
+      const storeKey = route.match(/^\/(?:v1\/|api\/)?responses\/([^/]+)$/)?.[1] || null;
+
+      // Retrieve / hapus respons yang masih tersimpan di instance ini
+      if (req.method === 'GET') {
+        if (!storeKey) {
+          sendJson(res, 405, {
+            error: {
+              message: 'Gunakan POST /v1/responses atau GET /v1/responses/{id}.',
+              type: 'invalid_request_error',
+              param: null,
+              code: 'method_not_allowed',
+            },
+          });
+          return;
+        }
+        const entry = responseStore.get(storeKey);
+        if (!entry) {
+          sendJson(res, 404, {
+            error: {
+              message: `Respons "${storeKey}" tidak ditemukan di instance ini (cache memori serverless, bisa hilang setelah cold start).`,
+              type: 'invalid_request_error',
+              param: 'id',
+              code: 'not_found',
+            },
+          });
+          return;
+        }
+        sendJson(res, 200, entry.response);
+        return;
+      }
+
+      if (req.method === 'DELETE') {
+        if (!storeKey) {
+          sendJson(res, 400, {
+            error: {
+              message: 'DELETE membutuhkan id respons: DELETE /v1/responses/{id}.',
+              type: 'invalid_request_error',
+              param: 'id',
+              code: 'missing_id',
+            },
+          });
+          return;
+        }
+        const existed = responseStore.delete(storeKey);
+        if (!existed) {
+          sendJson(res, 404, {
+            error: {
+              message: `Respons "${storeKey}" tidak ditemukan di instance ini.`,
+              type: 'invalid_request_error',
+              param: 'id',
+              code: 'not_found',
+            },
+          });
+          return;
+        }
+        sendJson(res, 200, { id: storeKey, object: 'response.deleted', deleted: true });
+        return;
+      }
+
+      if (req.method !== 'POST' || storeKey) {
+        sendJson(res, 405, {
+          error: {
+            message: `Metode ${req.method} tidak didukung untuk ${route}.`,
+            type: 'invalid_request_error',
+            param: null,
+            code: 'method_not_allowed',
+          },
+        });
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      const requestedModel = body.model || DEFAULT_MODEL_ID;
+      const stream = Boolean(body.stream);
+      const temperature = body.temperature ?? 0.65;
+      const topP = body.top_p ?? body.topP ?? 0.9;
+      const maxOutputTokens =
+        body.max_output_tokens ?? body.max_tokens ?? body.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+      const metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+
+      const { messages: inputMessages, instructions } = convertResponsesInput(body);
+      if (inputMessages.length === 0) {
+        sendJson(res, 400, {
+          error: {
+            message: 'Parameter "input" wajib diisi (string atau array item).',
+            type: 'invalid_request_error',
+            param: 'input',
+            code: 'missing_input',
+          },
+        });
+        return;
+      }
+
+      // previous_response_id: sambungkan riwayat dari cache instance (best-effort)
+      let previous = null;
+      if (body.previous_response_id) {
+        previous = responseStore.get(String(body.previous_response_id));
+        if (!previous) {
+          sendJson(res, 404, {
+            error: {
+              message: `previous_response_id "${body.previous_response_id}" tidak ditemukan di instance ini. Kirim riwayat lengkap lewat "input" atau ulangi tanpa previous_response_id.`,
+              type: 'invalid_request_error',
+              param: 'previous_response_id',
+              code: 'previous_response_not_found',
+            },
+          });
+          return;
+        }
+      }
+
+      const messages = previous
+        ? [...previous.messages, ...inputMessages]
+        : inputMessages;
+
+      const { tools, unsupported } = convertResponsesTools(body.tools);
+      const toolChoice = convertResponsesToolChoice(body.tool_choice);
+      const maxRounds = Number(body.max_tool_rounds) > 0 ? Number(body.max_tool_rounds) : undefined;
+
+      const responseId = `resp_${crypto.randomBytes(12).toString('hex')}`;
+      const createdAt = Math.floor(Date.now() / 1000);
+      const meta = {
+        instructions,
+        maxOutputTokens: Number(maxOutputTokens) || null,
+        temperature: Number(temperature),
+        topP: Number(topP),
+        tools: body.tools,
+        toolChoice,
+        store: body.store !== false,
+        metadata,
+        previousResponseId: body.previous_response_id || null,
+        unsupportedTools: unsupported,
+      };
+      meta.trace = null;
+
+      const abortController = new AbortController();
+      res.on('close', () => {
+        if (!res.writableEnded) abortController.abort();
+      });
+
+      const progressRef = { current: null };
+      const utcp = await resolveUtcp(req);
+
+      const agentParams = {
+        messages,
+        tools: tools.length ? tools : undefined,
+        toolChoice,
+        maxRounds,
+        temperature,
+        topP,
+        maxTokens: maxOutputTokens,
+        env: process.env,
+        ctx: toolContext(utcp.entries),
+        registry: getToolRegistry({ env: process.env, utcpTools: utcp.entries }),
+        runInference: (args) => {
+          const { signal, ...rest } = args || {};
+          return runChatInference({
+            modelId: requestedModel,
+            onProgress: progressRef.current || undefined,
+            ...rest,
+            signal: signal || abortController.signal,
+          });
+        },
+      };
+
+      const saveEntry = (response, finalMessages) => {
+        if (!meta.store) return;
+        responseStore.set(responseId, { response, messages: finalMessages });
+      };
+
+      if (stream) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          'Access-Control-Allow-Origin': '*',
+        });
+
+        const writer = createResponsesStream({
+          write: (chunk) => {
+            if (!res.writableEnded) res.write(chunk);
+          },
+          id: responseId,
+          model: requestedModel,
+          createdAt,
+          meta,
+        });
+
+        const writeStatus = (payload) => {
+          if (!res.writableEnded) res.write(`: status ${JSON.stringify(payload)}\n\n`);
+        };
+
+        progressRef.current = (progress) => {
+          writeStatus({
+            phase: 'downloading',
+            model: progress.modelId,
+            percent: progress.percent,
+            downloaded_mb: Math.round(progress.downloadedBytes / 1024 / 1024),
+            total_mb: Math.round(progress.totalBytes / 1024 / 1024),
+          });
+        };
+
+        writer.begin();
+
+        try {
+          const result = await runToolAgent({
+            ...agentParams,
+            onRound({ round }) {
+              if (round > 1) writeStatus({ phase: 'round', round });
+            },
+            onTextChunk(chunk) {
+              writer.textDelta(chunk);
+            },
+            onToolCall(call) {
+              writeStatus({
+                phase: 'tool_call',
+                id: call.id,
+                name: call.name,
+                arguments: call.arguments,
+              });
+            },
+            onToolResult(info) {
+              writeStatus({
+                phase: 'tool_result',
+                id: info.id,
+                name: info.name,
+                ok: info.ok,
+                duration_ms: info.duration_ms,
+                preview: info.result_preview,
+              });
+            },
+          });
+
+          // Tool milik client dikirim sebagai item function_call di akhir
+          for (const call of result.toolCalls || []) writer.toolCall(call);
+
+          meta.trace = result.trace || null;
+          const response = writer.finish(result);
+          if (response) saveEntry(response, messages);
+          res.end();
+        } catch (streamErr) {
+          writer.fail(streamErr);
+          res.end();
+        }
+        return;
+      }
+
+      const result = await runToolAgent(agentParams);
+      meta.trace = result.trace || null;
+
+      const response = buildResponseObject({
+        id: responseId,
+        model: requestedModel,
+        createdAt,
+        text: result.text || '',
+        toolCalls: result.toolCalls || [],
+        finishReason: result.finishReason || 'stop',
+        usage: result.usage,
+        meta,
+      });
+
+      saveEntry(response, messages);
+      sendJson(res, 200, response);
       return;
     }
 

@@ -77,6 +77,18 @@
       "destination": "/api/llm?__route=v1/chat/completions"
     },
     {
+      "source": "/v1/responses/:path*",
+      "destination": "/api/llm?__route=v1/responses/:path*"
+    },
+    {
+      "source": "/api/responses/:path*",
+      "destination": "/api/llm?__route=api/responses/:path*"
+    },
+    {
+      "source": "/responses/:path*",
+      "destination": "/api/llm?__route=responses/:path*"
+    },
+    {
       "source": "/v1/models",
       "destination": "/api/llm?__route=v1/models"
     },
