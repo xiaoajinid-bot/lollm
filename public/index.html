@@ -624,6 +624,14 @@
     .text-input { border: 1px solid var(--border); border-radius: 16px; background: #211f26; padding: 11px; }
     input[type="range"] { accent-color: var(--accent); }
     .main-area { background: var(--bg-root); }
+    .system-panel { gap: 10px; }
+    .live-indicator { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; }
+    .live-indicator .dot-live { width: 6px; height: 6px; box-shadow: 0 0 7px var(--accent); animation: pulse-live 1.8s ease-in-out infinite; }
+    .system-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .system-info-grid div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .system-info-grid span { color: var(--text-muted); font-size: 10px; }
+    .system-info-grid strong { overflow: hidden; color: var(--text-primary); font: 600 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+    @keyframes pulse-live { 50% { opacity: .35; transform: scale(.85); } }
     .topbar { height: 68px; border-bottom: 0; padding: 0 24px; background: var(--bg-root); }
     .mobile-menu-btn { border: 0; border-radius: 999px; background: var(--bg-elevated); }
     .tab-switcher { border: 0; border-radius: 999px; background: #211f26; padding: 4px; }
@@ -702,6 +710,19 @@
             <span class="metric-label">Request</span>
             <span class="metric-val" id="reqMetric">0</span>
           </div>
+        </div>
+      </section>
+
+      <section class="panel system-panel" aria-label="Informasi sistem">
+        <div class="panel-header">
+          <span>Informasi Sistem</span>
+          <span class="live-indicator"><span class="dot-live"></span><span id="telemetryAge">live</span></span>
+        </div>
+        <div class="system-info-grid">
+          <div><span>Runtime</span><strong id="runtimeInfo">Serverless</strong></div>
+          <div><span>Node</span><strong id="nodeInfo">—</strong></div>
+          <div><span>CPU</span><strong id="cpuInfo">—</strong></div>
+          <div><span>Update</span><strong id="healthUpdated">—</strong></div>
         </div>
       </section>
 
@@ -938,7 +959,15 @@
       testModelsBtn: document.getElementById('testModelsBtn'),
       testChatApiBtn: document.getElementById('testChatApiBtn'),
       liveApiOutput: document.getElementById('liveApiOutput'),
+      runtimeInfo: document.getElementById('runtimeInfo'),
+      nodeInfo: document.getElementById('nodeInfo'),
+      cpuInfo: document.getElementById('cpuInfo'),
+      healthUpdated: document.getElementById('healthUpdated'),
+      telemetryAge: document.getElementById('telemetryAge'),
     };
+
+    let telemetryTimer = null;
+    let telemetryBusy = false;
 
     function escapeHtml(raw) {
       return String(raw)
@@ -1117,8 +1146,31 @@ console.log(data.choices[0].message.content);`;
         ? `${h.stats.lastTokensPerSecond} tok/s`
         : '— tok/s';
       els.reqMetric.textContent = String(h.stats?.requestsServed ?? 0);
+      els.runtimeInfo.textContent = h.runtime?.vercel_region ? 'Vercel Function' : 'Local Node';
+      els.nodeInfo.textContent = h.runtime?.node_version || 'Node.js';
+      els.cpuInfo.textContent = h.runtime?.cpu_arch || 'CPU SIMD';
+      els.healthUpdated.textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      els.telemetryAge.textContent = 'live';
 
       renderModelCards(h.cached_models || []);
+    }
+
+    async function refreshTelemetry() {
+      if (telemetryBusy || state.isGenerating) return;
+      telemetryBusy = true;
+      try {
+        const response = await fetch('/api/health', { cache: 'no-store' });
+        if (response.ok) updateTelemetryUI(await response.json());
+      } catch {
+        els.telemetryAge.textContent = 'offline';
+      } finally {
+        telemetryBusy = false;
+      }
+    }
+
+    function startRealtimeTelemetry() {
+      clearInterval(telemetryTimer);
+      telemetryTimer = setInterval(refreshTelemetry, 3000);
     }
 
     function showProgress(text, percent = 0) {
@@ -1362,7 +1414,11 @@ console.log(data.choices[0].message.content);`;
       }
     });
 
-    els.refreshHealthBtn.addEventListener('click', fetchModelsAndHealth);
+    els.refreshHealthBtn.addEventListener('click', async () => {
+      els.telemetryAge.textContent = 'sync...';
+      await fetchModelsAndHealth();
+      startRealtimeTelemetry();
+    });
 
     document.querySelectorAll('.starter-card').forEach((card) => {
       card.addEventListener('click', () => {
@@ -1452,7 +1508,7 @@ console.log(data.choices[0].message.content);`;
 
     populateSnippets();
     renderModelCards();
-    fetchModelsAndHealth();
+    fetchModelsAndHealth().finally(startRealtimeTelemetry);
   </script>
 </body>
 </html>
