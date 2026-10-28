@@ -681,6 +681,63 @@ async function createApp({ mobile = false, chat = {}, store = null, confirm = tr
   assert('regresi: teks di luar code block tetap diformat', htmlOut.includes('<p>Selesai.</p>'));
 }
 
+/* 10b. Streaming = teks polos real-time, hasil akhir = markdown rapi */
+{
+  const chunks = [
+    'data: {"choices":[{"delta":{"content":"Contoh kode:\\n```js\\nconst a = 1;"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"\\nconsole.log(a);\\n```\\nSelesai."}}]}\n\n',
+    'data: [DONE]\n\n',
+  ];
+  const { doc, window } = await createApp({ chat: { chunks, delay: 150 } });
+  const bubbleOf = () => doc.querySelectorAll('.msg-row')[1]?.querySelector('.msg-bubble');
+
+  doc.getElementById('promptInput').value = 'tulis kode';
+  doc.getElementById('chatForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
+  assert(
+    'streaming: teks mentah tampil apa adanya',
+    await waitFor(() => Boolean(bubbleOf()?.textContent.includes('const a = 1;')), { timeout: 4000 })
+  );
+
+  const mid = bubbleOf();
+  assert('streaming: bubble memakai mode teks polos', mid.classList.contains('is-streaming'));
+  assert('streaming: belum ada tag hasil markdown', mid.children.length === 0, mid.innerHTML.slice(0, 120));
+  assert(
+    'streaming: baris & indentasi dipertahankan',
+    mid.textContent.includes('\n```js\nconst a = 1;'),
+    JSON.stringify(mid.textContent)
+  );
+
+  await waitFor(() => doc.getElementById('sendBtn').disabled === false, { timeout: 5000 });
+  await tick(60);
+
+  const final = bubbleOf();
+  assert('selesai: mode teks polos dilepas', !final.classList.contains('is-streaming'));
+  assert('selesai: blok kode dirender rapi', final.innerHTML.includes('<pre><code>'), final.innerHTML.slice(0, 160));
+  assert('selesai: paragraf terakhir dirender', final.innerHTML.includes('<p>Selesai.</p>'), final.innerHTML.slice(-120));
+}
+
+/* 10c. Stop di tengah streaming tetap menghasilkan tampilan rapi */
+{
+  const { doc, window } = await createApp({ chat: { mode: 'hang' } });
+  doc.getElementById('promptInput').value = 'Halo';
+  doc.getElementById('chatForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+
+  await waitFor(() => Boolean(doc.querySelectorAll('.msg-row')[1]?.querySelector('.msg-bubble')?.textContent.includes('Halo')), {
+    timeout: 4000,
+  });
+  const bubble = doc.querySelectorAll('.msg-row')[1].querySelector('.msg-bubble');
+  assert('stop: saat streaming masih mode teks polos', bubble.classList.contains('is-streaming'));
+
+  doc.getElementById('stopBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await waitFor(() => doc.getElementById('sendBtn').disabled === false, { timeout: 3000 });
+  await tick(60);
+
+  const after = doc.querySelectorAll('.msg-row')[1].querySelector('.msg-bubble');
+  assert('stop: teks yang sudah masuk tetap tampil', after.textContent.includes('Halo'));
+  assert('stop: mode teks polos dilepas', !after.classList.contains('is-streaming'));
+}
+
 /* 11. "Bersihkan" saat generasi berjalan tidak meninggalkan riwayat yatim */
 {
   const chatCfg = { mode: 'hang' };
