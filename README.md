@@ -146,6 +146,54 @@ Yang didukung:
 | `metadata`, `store` | `metadata` di-echo; `store: false` mematikan cache |
 | `text.format`, `reasoning`, tool bawaan (`web_search`, `file_search`, dll.) | belum didukung — diabaikan, nama tool-nya dilaporkan di `unsupported_tools` |
 
+### Tanpa API key (endpoint selalu terbuka)
+
+Semua endpoint publik bersifat **tanpa autentikasi**: server tidak memeriksa
+`Authorization`, `x-api-key`, maupun parameter `api_key`. Artinya:
+
+- Klien **tetap wajib** mengirim API key bila SDK-nya menuntut (OpenAI SDK, Codex CLI),
+  tetapi **nilainya bebas** — `sk-apa-saja`, `local-no-key-required`, atau string acak.
+- Request tanpa header auth sama sekali juga dilayani (`/v1/chat/completions`,
+  `/v1/responses`, `/api/*`).
+- CORS terbuka (`Access-Control-Allow-Origin: *`) dan `OPTIONS` preflight dijawab `204`,
+  jadi bisa dipanggil langsung dari browser aplikasi lain.
+- `Cache-Control: no-store` pada semua respons JSON API.
+
+Jangan taruh data rahasia pada prompt bila memakai deployment publik: siapa pun yang
+tahu URL-nya bisa memakai model dan tool yang sama.
+
+### Memakai Codex CLI ke endpoint ini
+
+Codex CLI (`codex exec`) berbicara lewat **Responses API** (`wire_api = "responses"`),
+jadi bisa diarahkan ke deployment ini. Contoh `~/.codex/config.toml`:
+
+```toml
+model = "qwen2.5-0.5b-instruct"
+model_provider = "lollm"
+
+[model_providers.lollm]
+name = "lollm"
+base_url = "https://lollm-psi.vercel.app/v1"
+env_key = "LOLLM_API_KEY"
+wire_api = "responses"
+```
+
+```bash
+export LOLLM_API_KEY=nilai-bebas-apa-saja      # server menerima semua nilai
+codex exec --skip-git-repo-check "cek sisa storage dan ram di server"
+```
+
+Yang sudah diuji terhadap `codex-cli 0.165.0`: Codex mengirim `tools` sendiri
+(`exec_command`, `write_stdin`, …) lewat `POST /v1/responses`; server mengembalikan
+panggilan itu sebagai item `function_call`, Codex mengeksekusi perintah di sandbox-nya,
+lalu mengirim balik hasilnya sebagai `function_call_output` dan model menjawab memakai
+data tersebut. Jadi perintah seperti `free -m`, `df -h /tmp`, atau `cat` benar-benar
+dijalankan **di mesin tempat Codex berjalan**, bukan di server Vercel.
+
+Untuk RAM/disk milik server sendiri, pakai tool bawaan `llm_runtime_info`
+(`rss_mb`, `cpu_cores`, `region`) atau `GET /api/health` → `runtime.tmp_disk`
+(`total_mb`, `used_mb`, `free_mb`).
+
 Catatan: serverless tidak punya storage lintas instance, jadi `GET /v1/responses/{id}`
 dan `previous_response_id` hanya bekerja selama instance function yang sama masih hidup
 (cold start menghapusnya). Untuk riwayat panjang, kirim ulang riwayat lewat `input`.
@@ -517,13 +565,22 @@ Placeholder yang didukung: `{{nama_argumen}}` untuk argumen model dan
 - `http_fetch` dan connector selalu menolak `localhost`, IP privat/link-local
   (`127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `::1`, `fc00::/7`),
   host `.local`/`.internal`, serta metadata cloud; host lain harus ada di allowlist.
-- Hasil tool dibatasi ukurannya (`max_chars`, maksimum 64 KB per respons HTTP) agar konteks 2048 token tidak jebol.
+- Hasil tool dibatasi ukurannya (`max_chars`, maksimum 64 KB per respons HTTP) agar konteks model tidak jebol.
 - `POST /api/tools` bisa dimatikan lewat `LLM_TOOLS_DIRECT_INVOKE=disabled`.
+- **API tidak memakai autentikasi**: siapa pun yang tahu URL bisa memakai model dan semua
+  tool aktif. `http_fetch`/connector tetap dibatasi allowlist, tetapi tool baca-saja
+  (`llm_runtime_info`, `get_current_time`, `wikipedia_summary`) dan tool tulis S3
+  (`/api/store/save`, `/api/store/delete`) terbuka. Persempit dengan
+  `LLM_TOOLS_DISABLED`, `LLM_TOOL_HTTP_ALLOW_HOSTS`, atau kosongkan kredensial S3
+  bila deployment benar-benar publik.
 
 ### Uji otomatis
 
 ```bash
-npm test   # 40 test: parser tool, executor, agent loop, dan endpoint API (SSE)
+npm test                                          # 159 test: parser tool, executor, agent loop,
+                                                  #   endpoint API (SSE), Responses API, storage
+JSDOM_PATH=/path/node_modules/jsdom \
+  node tests/ui/functional.mjs                    # 98 test UI (jsdom, opsional)
 ```
 
 ---
