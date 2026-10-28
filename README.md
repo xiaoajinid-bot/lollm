@@ -340,6 +340,24 @@ curl -s https://lollm-psi.vercel.app/api/storage/check | jq '.results'
 lalu melaporkan `ok`, status HTTP, dan ukuran file — cukup untuk memastikan bucket,
 kredensial, prefix, dan nama file sudah benar.
 
+## Tampilan streaming di Web Chat UI
+
+Tab **Chat** memakai dua mode tampilan untuk jawaban asisten, supaya teks tetap
+enak dibaca saat token belum lengkap:
+
+1. **Selagi streaming** — token yang masuk lewat SSE ditulis sebagai **teks polos**
+   (`textContent`, bukan HTML). CSS `.msg-bubble.is-streaming` memakai
+   `white-space: pre-wrap` sehingga baris, indentasi, dan blok kode yang belum
+   ditutup tetap terbaca apa adanya, plus kursor `▍` sebagai penanda proses.
+   Pelukisan dibatasi maksimal sekali per `requestAnimationFrame`, jadi tetap
+   ringan walau token datang sangat cepat.
+2. **Setelah selesai** — `[DONE]`, tombol Stop, atau error: teks polos diganti
+   hasil `renderMarkdown()` sekali jalan (paragraf, `**tebal**`, `` `kode` ``,
+   dan blok ```` ``` ```` jadi `<pre><code>`).
+
+Artinya markdown setengah jadi tidak pernah dirender, dan yang tersimpan di
+`state.messages` tetap teks mentah dari model (dipakai untuk riwayat percakapan).
+
 ## Model Store (tab di Web UI)
 
 Tab **Model Store** di halaman utama menggantikan panel dokumentasi/tester endpoint

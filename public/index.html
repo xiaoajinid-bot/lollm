@@ -429,6 +429,30 @@
       margin: 10px 0;
     }
     .msg-bubble pre code { background: transparent; padding: 0; color: #e2e8f0; }
+    /*
+     * Mode streaming: bubble hanya berisi teks polos (bukan HTML hasil markdown).
+     * pre-wrap menjaga baris & indentasi tetap terbaca saat token datang bertahap.
+     */
+    .msg-bubble.is-streaming {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      font-variant-ligatures: none;
+      tab-size: 2;
+    }
+    .msg-bubble.is-streaming::after {
+      content: '▍';
+      margin-left: 1px;
+      color: var(--accent, #a78bfa);
+      animation: stream-caret 1s steps(2, start) infinite;
+    }
+    @keyframes stream-caret {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .msg-bubble.is-streaming::after { animation: none; }
+    }
     .msg-meta { font-size: 11.5px; font-family: var(--font-mono); color: var(--text-muted); padding: 0 4px; }
 
     .composer {
@@ -1596,6 +1620,28 @@ Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, 
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     }
 
+    /*
+     * Dua mode tampilan jawaban asisten:
+     *  1. streaming → teks polos real-time (textContent), ringan & mudah dibaca,
+     *     tidak ada HTML/markdown setengah jadi yang bikin tampilan "pecah".
+     *  2. selesai   → renderMarkdown() sekali, hasilnya teks rapi (paragraf,
+     *     daftar, blok kode).
+     */
+    function showStreamingText(bubble, text) {
+      if (!bubble) return;
+      if (!bubble.classList.contains('is-streaming')) {
+        bubble.classList.add('is-streaming');
+        bubble.textContent = '';
+      }
+      bubble.textContent = text;
+    }
+
+    function finalizeAssistantBubble(bubble, text) {
+      if (!bubble) return;
+      bubble.classList.remove('is-streaming');
+      bubble.innerHTML = renderMarkdown(text);
+    }
+
     function renderMarkdown(text) {
       if (!text) return '<span style="color:#64748b">...</span>';
 
@@ -1888,6 +1934,36 @@ Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, 
       let finalTimings = null;
       let finalUsage = null;
 
+      /*
+       * Streaming: token ditampilkan sebagai teks polos, dilukis maksimal sekali
+       * per animation frame supaya tetap halus walau token datang sangat cepat.
+       */
+      let paintQueued = false;
+      let streamClosed = false;
+
+      const paintStreaming = () => {
+        if (streamClosed || paintQueued) return;
+        paintQueued = true;
+        const paint = () => {
+          paintQueued = false;
+          if (streamClosed) return;
+          showStreamingText(assistantNodes.bubble, assistantText);
+          els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+        };
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(paint);
+        } else {
+          setTimeout(paint, 16);
+        }
+      };
+
+      /* Selesai/berhenti: teks polos diganti hasil markdown yang rapi. */
+      const finalizeStream = () => {
+        streamClosed = true;
+        paintQueued = false;
+        finalizeAssistantBubble(assistantNodes.bubble, assistantText);
+      };
+
       try {
         const res = await fetch('/v1/chat/completions', {
           method: 'POST',
@@ -1965,8 +2041,7 @@ Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, 
                   if (delta) {
                     hideProgress();
                     assistantText += delta;
-                    assistantNodes.bubble.innerHTML = renderMarkdown(assistantText);
-                    els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+                    paintStreaming();
                   }
                   if (parsed.timings) finalTimings = parsed.timings;
                   if (parsed.usage) finalUsage = parsed.usage;
@@ -1980,6 +2055,7 @@ Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, 
           }
         }
 
+        finalizeStream();
         state.messages.push({ role: 'assistant', content: assistantText });
         const speedInfo = finalTimings?.tokens_per_second
           ? `${finalTimings.tokens_per_second} tok/dtk`
@@ -1999,11 +2075,14 @@ Prioritaskan tool: bila ada tool yang relevan (hitung, waktu, cuaca, pencarian, 
         fetchModelsAndHealth();
       } catch (err) {
         if (err.name === 'AbortError') {
+          finalizeStream();
           if (assistantText) {
             state.messages.push({ role: 'assistant', content: assistantText });
           }
           assistantNodes.meta.textContent = `${state.selectedModel} · Dihentikan oleh pengguna`;
         } else {
+          streamClosed = true;
+          assistantNodes.bubble.classList.remove('is-streaming');
           assistantNodes.bubble.innerHTML = `<p style="color:#f87171"><strong>Error:</strong> ${escapeHtml(
             err.message
           )}</p>`;
