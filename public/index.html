@@ -486,94 +486,12 @@
       font-size: 13px;
       cursor: pointer;
     }
-
-    .api-docs-wrap {
-      max-width: 900px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 24px 20px 48px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .api-hero-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px 20px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .api-hero-card h2 { font-size: 18px; margin-bottom: 6px; }
-    .api-hero-card p { color: var(--text-secondary); max-width: 520px; font-size: 13.5px; }
-
-    .base-url-box {
-      background: var(--bg-root);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-      min-width: 280px;
-    }
     .base-url-label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
     .base-url-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .base-url-row code { font-family: var(--font-mono); color: #34d399; font-size: 12.5px; }
-
-    .endpoint-badges { display: flex; flex-wrap: wrap; gap: 8px; }
-    .ep-pill {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 6px 10px;
-      font-size: 12px;
-      color: var(--text-secondary);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
     .method { font-family: var(--font-mono); font-weight: 700; font-size: 10.5px; padding: 2px 6px; border-radius: 4px; }
     .method.get { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
     .method.post { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-
-    .code-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-    .code-card-header {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-weight: 600;
-      font-size: 13px;
-    }
-    .tester-btns { display: flex; gap: 8px; }
-    .copy-small-btn {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 11.5px;
-      cursor: pointer;
-    }
-    .copy-small-btn:hover { border-color: var(--accent); }
-    .code-block {
-      padding: 14px;
-      font-family: var(--font-mono);
-      font-size: 12.5px;
-      color: #e2e8f0;
-      overflow-x: auto;
-      background: #090b10;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
 
     @media (max-width: 860px) {
       .app-shell { grid-template-columns: 1fr; }
@@ -620,7 +538,7 @@
     .brand-sub { color: var(--text-muted); }
     .panel { border: 0; border-radius: 24px; padding: 16px; background: #2b2930; gap: 12px; }
     .panel-header { color: var(--text-primary); text-transform: none; letter-spacing: 0; font-size: 13px; }
-    .icon-btn, .secondary-btn, .ghost-btn, .copy-small-btn { border: 0; border-radius: 999px; background: var(--bg-elevated); color: var(--text-primary); }
+    .icon-btn, .secondary-btn, .ghost-btn{ border: 0; border-radius: 999px; background: var(--bg-elevated); color: var(--text-primary); }
     .icon-btn { width: 30px; height: 30px; }
     .status-pill.warm { background: #c8e6c9; color: #183a1b; }
     .status-pill, .status-pill.cold, .status-pill.busy { border-radius: 999px; }
@@ -662,10 +580,6 @@
     .send-btn { border-radius: 999px; background: var(--accent); color: #332b48; padding: 10px 18px; }
     .send-btn:hover:not(:disabled) { background: var(--accent-hover); color: #332b48; }
     .stop-btn { border: 0; border-radius: 999px; }
-    .api-docs-wrap { padding: 28px 24px 48px; }
-    .api-hero-card, .code-card { border: 0; border-radius: 24px; background: #211f26; }
-    .base-url-box, .code-block { border: 0; border-radius: 16px; background: #141218; }
-    .ep-pill { border: 0; border-radius: 999px; background: #2b2930; }
     @media (max-width: 860px) {
       .app-shell { display: block; }
       .sidebar { width: min(88vw, 320px); padding: 16px 12px 20px; gap: 12px; }
@@ -689,11 +603,6 @@
       .composer-box { gap: 6px; padding: 8px 8px 8px 14px; }
       #promptInput { font-size: 14px; min-width: 0; }
       .send-btn { padding: 9px 13px; font-size: 12.5px; }
-      .api-docs-wrap { padding: 16px 12px 28px; gap: 12px; }
-      .api-hero-card { padding: 16px; gap: 12px; }
-      .api-hero-card p { font-size: 13px; }
-      .base-url-box { min-width: 0; width: 100%; }
-      .code-block { font-size: 11.5px; padding: 12px; }
     }
 
     @media (max-width: 420px) {
@@ -741,19 +650,6 @@
       .stop-btn { padding: 8px 10px; border-radius: 20px; font-size: 11px; }
       .msg-bubble { max-width: 94%; padding: 11px 13px; font-size: 14px; line-height: 1.5; border-radius: 18px; }
       .msg-meta { font-size: 10px; }
-      .api-docs-wrap { padding: 16px 14px 30px; gap: 12px; }
-      .api-hero-card { padding: 16px; border: 0; border-radius: 22px; display: block; }
-      .api-hero-card h2 { font-size: 18px; }
-      .api-hero-card p { font-size: 12px; }
-      .base-url-box { min-width: 0; margin-top: 14px; border: 0; border-radius: 16px; }
-      .endpoint-badges { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-      .ep-pill { min-width: 0; padding: 8px; border: 0; border-radius: 14px; font-size: 10px; overflow: hidden; }
-      .ep-pill code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .code-card { border: 0; border-radius: 20px; }
-      .code-card-header { padding: 12px 14px; gap: 8px; }
-      .tester-btns { flex-wrap: wrap; justify-content: flex-end; }
-      .tester-btns .secondary-btn { padding: 7px 9px; font-size: 10px; }
-      .code-block { padding: 12px; font-size: 10.5px; }
     }
 
     /* ===================================================================
@@ -823,8 +719,7 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-    .msg-bubble pre,
-    .code-block {
+    .msg-bubble pre{
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-x: contain;
     }
@@ -875,8 +770,7 @@
         padding-left: max(14px, env(safe-area-inset-left, 0px));
         padding-right: max(14px, env(safe-area-inset-right, 0px));
       }
-      .messages-container,
-      .api-docs-wrap {
+      .messages-container{
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
       }
@@ -888,8 +782,6 @@
         height: 44px;
         padding: 0;
       }
-      .copy-small-btn,
-      .tester-btns .secondary-btn,
       .ghost-btn {
         min-height: 40px;
         padding-block: 8px;
@@ -954,10 +846,6 @@
         background: rgba(208, 188, 255, 0.12);
       }
       .icon-btn:hover,
-      .copy-small-btn:hover {
-        background: var(--bg-elevated);
-        color: var(--text-primary);
-      }
       .ghost-btn:hover {
         background: var(--bg-elevated);
         color: var(--text-primary);
@@ -1128,6 +1016,42 @@
         scroll-behavior: auto !important;
       }
     }
+
+    /* ---------- Model Store & daftar model di chat ---------- */
+    .store-wrap { flex: 1; overflow-y: auto; padding: 24px; max-width: 1120px; margin: 0 auto; width: 100%; }
+    .store-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .store-header h2 { font-size: 20px; margin: 0 0 4px; }
+    .store-header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+    .store-status.ok { color: #6ee7a8; }
+    .store-status.warn { color: #fbbf24; }
+    .store-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+    .store-column { border: 1px solid var(--border); border-radius: var(--radius-md); background: #1a1820; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .store-column-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-secondary); }
+    .store-list { display: flex; flex-direction: column; gap: 8px; }
+    .store-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #211f26; padding: 10px 12px; }
+    .store-card-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .store-card-main strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .store-card-meta { color: var(--text-muted); font-size: 11px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .store-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .store-empty { color: var(--text-muted); font-size: 12px; padding: 6px 2px; }
+    .store-tag { font-size: 10px; border-radius: 999px; padding: 3px 8px; background: rgba(110,231,168,.12); color: #6ee7a8; white-space: nowrap; }
+    .danger-btn { border: 1px solid rgba(248,113,113,.35); background: rgba(248,113,113,.12); color: #f87171; border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; cursor: pointer; }
+    .danger-btn:hover { background: rgba(248,113,113,.2); }
+    .danger-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .chat-model-bar { display: flex; gap: 8px; padding: 8px 24px 0; overflow-x: auto; scrollbar-width: none; }
+    .chat-model-bar::-webkit-scrollbar { display: none; }
+    .chat-model-bar.hidden { display: none; }
+    .model-chip { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 999px; background: #211f26; color: var(--text-secondary); padding: 6px 11px; font-size: 11px; font-family: var(--font-mono); cursor: pointer; }
+    .model-chip.active { border-color: var(--accent); color: var(--text-primary); background: rgba(208,188,255,.12); }
+    .model-chip-tag { font-size: 9px; text-transform: uppercase; letter-spacing: .05em; border-radius: 999px; padding: 2px 6px; background: rgba(255,255,255,.08); color: var(--text-muted); }
+    .model-chip.active .model-chip-tag { background: rgba(208,188,255,.2); color: var(--accent); }
+
+    @media (max-width: 860px) {
+      .store-wrap { padding: 16px 14px 28px; }
+      .store-columns { grid-template-columns: 1fr; }
+      .chat-model-bar { padding: 6px 14px 0; }
+    }
   </style>
 </head>
 <body>
@@ -1267,7 +1191,7 @@
           </button>
           <div class="tab-switcher">
             <button class="tab-btn active" data-tab="chat">Chat</button>
-            <button class="tab-btn" data-tab="api">Public API</button>
+            <button class="tab-btn" data-tab="store">Model Store</button>
           </div>
         </div>
         <div class="topbar-right">
@@ -1316,6 +1240,8 @@
           </div>
         </div>
 
+        <div class="chat-model-bar" id="chatModelBar" aria-label="Model yang tersedia"></div>
+
         <form class="composer" id="chatForm">
           <div class="composer-box">
             <textarea
@@ -1331,115 +1257,36 @@
         </form>
       </section>
 
-      <section class="tab-view" id="tab-api">
-        <div class="api-docs-wrap">
-          <div class="api-hero-card">
+      <section class="tab-view" id="tab-store">
+        <div class="store-wrap">
+          <div class="store-header">
             <div>
-              <h2>Endpoint Public Domain (OpenAI & Ollama Compatible)</h2>
-              <p>
-                Domain ini dapat diakses publik tanpa autentikasi SSO Vercel (CORS <code>*</code> aktif).
-                Gunakan langsung dengan SDK OpenAI, Ollama client, <code>curl</code>, atau aplikasi eksternal Anda.
-              </p>
+              <h2>Model Store</h2>
+              <p id="storeStatusText">Memeriksa storage...</p>
             </div>
-            <div class="base-url-box">
-              <span class="base-url-label">OpenAI Base URL</span>
-              <div class="base-url-row">
-                <code id="openaiBaseUrl">https://.../v1</code>
-                <button class="copy-small-btn" id="copyBaseUrlBtn">Salin</button>
+            <button class="secondary-btn sm" id="storeRefreshBtn" type="button">↻ Segarkan</button>
+          </div>
+
+          <div class="store-columns">
+            <div class="store-column">
+              <div class="store-column-header">
+                <span>Katalog GGUF</span>
+                <span class="live-indicator" id="storeCatalogCount">—</span>
+              </div>
+              <div class="store-list" id="storeCatalogList">
+                <div class="store-empty">Memuat katalog...</div>
               </div>
             </div>
-          </div>
 
-          <div class="endpoint-badges">
-            <div class="ep-pill"><span class="method get">GET</span> <code>/api/health</code> Status & RAM/Disk</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/v1/models</code> Daftar Model OpenAI</div>
-            <div class="ep-pill"><span class="method post">POST</span> <code>/v1/chat/completions</code> Chat (Stream & JSON)</div>
-            <div class="ep-pill"><span class="method post">POST</span> <code>/api/generate</code> Ollama Compatible</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/api/tools</code> Katalog Tool &amp; Connector</div>
-            <div class="ep-pill"><span class="method post">POST</span> <code>/api/tools</code> Panggil Tool Langsung</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/.well-known/utcp</code> Manual UTCP Server</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/api/utcp</code> Status Manual UTCP</div>
-            <div class="ep-pill"><span class="method post">POST</span> <code>/api/utcp/discover</code> Discovery Manual</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/api/storage</code> Status Sumber Model</div>
-            <div class="ep-pill"><span class="method get">GET</span> <code>/api/storage/check</code> Verifikasi Objek Model</div>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>🧪 Uji Langsung Endpoint Publik</span>
-              <div class="tester-btns">
-                <button class="secondary-btn sm" id="testModelsBtn">GET /v1/models</button>
-                <button class="secondary-btn sm" id="testChatApiBtn">POST /v1/chat/completions</button>
-                <button class="secondary-btn sm" id="testToolsBtn">GET /api/tools</button>
-                <button class="secondary-btn sm" id="testUtcpBtn">GET /api/utcp</button>
-                <button class="secondary-btn sm" id="testStorageBtn">GET /api/storage</button>
+            <div class="store-column">
+              <div class="store-column-header">
+                <span>Model di storage</span>
+                <span class="live-indicator" id="storeObjectsCount">—</span>
+              </div>
+              <div class="store-list" id="storeObjectsList">
+                <div class="store-empty">Memuat isi storage...</div>
               </div>
             </div>
-            <pre class="code-block" id="liveApiOutput">Klik salah satu tombol di atas untuk menguji respons JSON langsung dari server...</pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>1. cURL — OpenAI Chat Completions</span>
-              <button class="copy-small-btn" data-copy-target="curlSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="curlSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>2. Python — Resmi OpenAI SDK</span>
-              <button class="copy-small-btn" data-copy-target="pythonSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="pythonSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>3. JavaScript / Node.js — Fetch API</span>
-              <button class="copy-small-btn" data-copy-target="jsSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="jsSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>4. Function / Tool Calling (OpenAI compatible)</span>
-              <button class="copy-small-btn" data-copy-target="toolSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="toolSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>5. Connector Kustom via LLM_CONNECTORS</span>
-              <button class="copy-small-btn" data-copy-target="connectorSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="connectorSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>6. UTCP — Universal Tool Calling Protocol</span>
-              <button class="copy-small-btn" data-copy-target="utcpSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="utcpSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>7. Penyimpanan Model (S3 / Vercel Blob)</span>
-              <button class="copy-small-btn" data-copy-target="storageSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="storageSnippet"></pre>
-          </div>
-
-          <div class="code-card">
-            <div class="code-card-header">
-              <span>8. Ollama Compatible Endpoint (/api/generate)</span>
-              <button class="copy-small-btn" data-copy-target="ollamaSnippet">Salin Kode</button>
-            </div>
-            <pre class="code-block" id="ollamaSnippet"></pre>
           </div>
         </div>
       </section>
@@ -1490,33 +1337,24 @@
       promptInput: document.getElementById('promptInput'),
       sendBtn: document.getElementById('sendBtn'),
       stopBtn: document.getElementById('stopBtn'),
-      openaiBaseUrl: document.getElementById('openaiBaseUrl'),
-      copyBaseUrlBtn: document.getElementById('copyBaseUrlBtn'),
-      curlSnippet: document.getElementById('curlSnippet'),
-      pythonSnippet: document.getElementById('pythonSnippet'),
-      jsSnippet: document.getElementById('jsSnippet'),
-      ollamaSnippet: document.getElementById('ollamaSnippet'),
-      testModelsBtn: document.getElementById('testModelsBtn'),
-      testChatApiBtn: document.getElementById('testChatApiBtn'),
-      liveApiOutput: document.getElementById('liveApiOutput'),
       runtimeInfo: document.getElementById('runtimeInfo'),
       nodeInfo: document.getElementById('nodeInfo'),
       cpuInfo: document.getElementById('cpuInfo'),
       healthUpdated: document.getElementById('healthUpdated'),
       telemetryAge: document.getElementById('telemetryAge'),
       toolsEnabled: document.getElementById('toolsEnabled'),
+      chatModelBar: document.getElementById('chatModelBar'),
+      storeStatusText: document.getElementById('storeStatusText'),
+      storeRefreshBtn: document.getElementById('storeRefreshBtn'),
+      storeCatalogList: document.getElementById('storeCatalogList'),
+      storeObjectsList: document.getElementById('storeObjectsList'),
+      storeCatalogCount: document.getElementById('storeCatalogCount'),
+      storeObjectsCount: document.getElementById('storeObjectsCount'),
+      modelSourceHint: document.getElementById('modelSourceHint'),
       toolList: document.getElementById('toolList'),
       toolCount: document.getElementById('toolCount'),
       toolRounds: document.getElementById('toolRounds'),
       toolsHint: document.getElementById('toolsHint'),
-      testToolsBtn: document.getElementById('testToolsBtn'),
-      testUtcpBtn: document.getElementById('testUtcpBtn'),
-      testStorageBtn: document.getElementById('testStorageBtn'),
-      modelSourceHint: document.getElementById('modelSourceHint'),
-      storageSnippet: document.getElementById('storageSnippet'),
-      utcpSnippet: document.getElementById('utcpSnippet'),
-      toolSnippet: document.getElementById('toolSnippet'),
-      connectorSnippet: document.getElementById('connectorSnippet'),
     };
 
     let telemetryTimer = null;
@@ -1809,193 +1647,7 @@
       }, 1500);
     }
 
-    function flashButtonLabel(button, defaultValue, ok) {
-      flashLabel(button, defaultValue, ok ? 'Tersalin!' : 'Gagal menyalin');
-    }
 
-    function populateSnippets() {
-      const origin = window.location.origin || 'https://lokal-llm.vercel.app';
-      els.domainText.textContent = window.location.host || 'preview';
-      els.openaiBaseUrl.textContent = `${origin}/v1`;
-
-      els.curlSnippet.textContent = `curl -s ${origin}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${state.selectedModel}",
-    "messages": [
-      {"role": "user", "content": "Halo! Jelaskan singkat apa itu Local LLM."}
-    ],
-    "temperature": 0.65,
-    "max_tokens": 256
-  }'`;
-
-      els.pythonSnippet.textContent = `from openai import OpenAI
-
-client = OpenAI(
-    base_url="${origin}/v1",
-    api_key="local-no-key-required",
-)
-
-resp = client.chat.completions.create(
-    model="${state.selectedModel}",
-    messages=[
-        {"role": "user", "content": "Buatkan contoh fungsi rekursif Python."}
-    ],
-    stream=True,
-)
-
-for chunk in resp:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)`;
-
-      els.jsSnippet.textContent = `const res = await fetch("${origin}/v1/chat/completions", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    model: "${state.selectedModel}",
-    messages: [{ role: "user", "content": "Halo dari domain publik Vercel!" }],
-    stream: false,
-  }),
-});
-
-const data = await res.json();
-console.log(data.choices[0].message.content);`;
-
-      const toolNames = (toolState.items.length
-        ? toolState.items.filter((tool) => tool.available).map((tool) => tool.function.name)
-        : ['calculate', 'get_current_time', 'wikipedia_summary']
-      ).slice(0, 4);
-
-      els.toolSnippet.textContent = `# 1) Lihat tool & connector yang tersedia di server
-curl -s ${origin}/api/tools
-
-# 2) Chat dengan tool calling (server mengeksekusi tool otomatis)
-curl -s ${origin}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${state.selectedModel}",
-    "messages": [{"role":"user","content":"Berapa (19*23)+7? Sekalian jam sekarang."}],
-    "tools": [{
-      "type": "function",
-      "function": {
-        "name": "calculate",
-        "description": "Menghitung ekspresi matematika",
-        "parameters": {
-          "type": "object",
-          "properties": {"expression": {"type": "string"}},
-          "required": ["expression"]
-        }
-      }
-    }],
-    "tool_choice": "auto",
-    "max_tool_rounds": 2
-  }'
-
-# Tool yang bisa dipanggil: ${toolNames.join(', ') || '-'}
-# Respons berisi choices[0].message.content + tool_trace (tool yang dieksekusi server).`;
-
-      els.connectorSnippet.textContent = `# Tambahkan di Vercel → Project → Settings → Environment Variables
-LLM_CONNECTORS='[
-  {
-    "name": "cuaca_kota",
-    "description": "Info cuaca terkini untuk sebuah kota",
-    "parameters": {
-      "type": "object",
-      "properties": { "kota": { "type": "string" } },
-      "required": ["kota"]
-    },
-    "request": {
-      "url": "https://api.contoh.com/cuaca?q={{kota}}&unit=c",
-      "method": "GET",
-      "headers": { "Authorization": "Bearer {{env:CUACA_API_KEY}}" }
-    },
-    "response_path": "current",
-    "max_chars": 1200
-  },
-  {
-    "name": "buat_tiket",
-    "description": "Membuat tiket dukungan baru",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "judul": { "type": "string" },
-        "prioritas": { "type": "string", "enum": ["low", "high"] }
-      },
-      "required": ["judul"]
-    },
-    "request": {
-      "url": "https://api.contoh.com/tiket",
-      "method": "POST",
-      "body": { "title": "{{judul}}", "priority": "{{prioritas}}" }
-    },
-    "response_path": "data.id"
-  }
-]'
-
-# Host tujuan wajib ada di allowlist (proteksi SSRF)
-LLM_TOOL_HTTP_ALLOW_HOSTS="api.contoh.com"
-
-# Opsional
-LLM_TOOL_MAX_ROUNDS="3"        # batas putaran tool per request
-LLM_TOOLS_DISABLED="http_fetch" # matikan tool tertentu
-LLM_TOOLS_DIRECT_INVOKE="disabled" # matikan POST /api/tools`;
-
-      els.storageSnippet.textContent = `# GGUF diambil dari sumber pertama yang aktif, lalu fallback ke Hugging Face.
-# Urutan mode auto: s3 -> blob -> url -> huggingface (atur lewat LLM_MODEL_SOURCE)
-
-# A) S3-compatible: AWS S3, Cloudflare R2, Backblaze B2, MinIO, Supabase
-LLM_S3_BUCKET="lollm-models"
-LLM_S3_REGION="auto"              # R2: "auto"; AWS: mis. ap-southeast-2
-LLM_S3_ENDPOINT="https://<account>.r2.cloudflarestorage.com"   # kosongkan untuk AWS
-LLM_S3_ACCESS_KEY_ID="..."
-LLM_S3_SECRET_ACCESS_KEY="..."
-LLM_S3_PREFIX="models/"           # objek: models/<nama-file>.gguf
-LLM_S3_FORCE_PATH_STYLE="true"    # wajib untuk R2/MinIO
-
-# B) Vercel Blob (storage bawaan) - unggah file lalu isi base URL publik
-LLM_BLOB_BASE_URL="https://<store>.public.blob.vercel-storage.com"
-# BLOB_READ_WRITE_TOKEN otomatis tersedia bila Blob store terhubung ke project
-# LLM_BLOB_PRIVATE="true"         # bila store privat (memakai token di header)
-
-# C) Base URL generik / CDN
-LLM_MODEL_BASE_URL="https://cdn.contoh.com/models"
-
-# Verifikasi objek ada di bucket TANPA memuat model
-curl -s ${origin}/api/storage/check | head -40
-
-# Unggah sekali dari komputer lokal (AWS CLI / rclone)
-aws s3 cp Qwen2.5-0.5B-Instruct-Q4_K_M.gguf s3://lollm-models/models/`;
-
-      els.utcpSnippet.textContent = `# 1) Server ini menerbitkan manual UTCP di /.well-known/utcp
-curl -s ${origin}/.well-known/utcp | head -40
-
-# 2) Discovery manual UTCP eksternal (UTCP manual, OpenAPI, atau MCP server)
-curl -s ${origin}/api/utcp/discover \\
-  -H "Content-Type: application/json" \\
-  -d '{"url":"https://contoh.com/.well-known/utcp","name":"demo"}'
-
-# 3) Panggil tool UTCP yang terdaftar (nama: manual.tool)
-curl -s ${origin}/api/utcp/call \\
-  -H "Content-Type: application/json" \\
-  -d '{"tool":"demo.get_weather","arguments":{"city":"Bandung"}}'
-
-# 4) Daftarkan manual permanen lewat environment variable
-LLM_UTCP_MANUALS='[
-  {"name":"cuaca","call_template_type":"http","url":"https://contoh.com/utcp"},
-  {"name":"tools","call_template_type":"mcp","config":{"mcpServers":{"main":{"transport":"http","url":"https://mcp.contoh.com/mcp"}}}}
-]'
-LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
-
-# Protokol didukung: http, streamable_http, mcp (HTTP), sse
-# Tidak didukung di serverless: cli, websocket, grpc, mcp stdio`;
-
-      els.ollamaSnippet.textContent = `curl -s ${origin}/api/generate \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${state.selectedModel}",
-    "prompt": "Sebutkan 3 bahasa pemrograman populer.",
-    "stream": false
-  }'`;
-    }
 
     function renderModelCards(cachedModels = []) {
       const cacheMap = new Map(cachedModels.map((m) => [m.id, m]));
@@ -2035,7 +1687,7 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
         btn.addEventListener('click', () => {
           state.selectedModel = m.id;
           renderModelCards(cachedModels);
-          populateSnippets();
+          renderChatModelBar();
         });
         els.modelList.appendChild(btn);
       }
@@ -2050,6 +1702,7 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
         if (modelsRes.ok) {
           const mJson = await modelsRes.json();
           state.models = mJson.data || [];
+          renderChatModelBar();
         }
         if (healthRes.ok) {
           const h = await healthRes.json();
@@ -2107,6 +1760,7 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
       }
 
       renderModelCards(h.cached_models || []);
+      renderChatModelBar();
     }
 
     async function refreshTelemetry() {
@@ -2428,44 +2082,8 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
       saveToolPrefs();
     });
 
-    els.testToolsBtn.addEventListener('click', async () => {
-      els.liveApiOutput.textContent = 'Memanggil GET /api/tools ...';
-      try {
-        const t0 = performance.now();
-        const res = await fetch('/api/tools', { cache: 'no-store' });
-        const json = await res.json();
-        const ms = Math.round(performance.now() - t0);
-        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
-      } catch (err) {
-        els.liveApiOutput.textContent = `Error: ${err.message}`;
-      }
-    });
 
-    els.testUtcpBtn.addEventListener('click', async () => {
-      els.liveApiOutput.textContent = 'Memanggil GET /api/utcp ...';
-      try {
-        const t0 = performance.now();
-        const res = await fetch('/api/utcp', { cache: 'no-store' });
-        const json = await res.json();
-        const ms = Math.round(performance.now() - t0);
-        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
-      } catch (err) {
-        els.liveApiOutput.textContent = `Error: ${err.message}`;
-      }
-    });
 
-    els.testStorageBtn.addEventListener('click', async () => {
-      els.liveApiOutput.textContent = 'Memanggil GET /api/storage ...';
-      try {
-        const t0 = performance.now();
-        const res = await fetch('/api/storage', { cache: 'no-store' });
-        const json = await res.json();
-        const ms = Math.round(performance.now() - t0);
-        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
-      } catch (err) {
-        els.liveApiOutput.textContent = `Error: ${err.message}`;
-      }
-    });
 
     els.warmupBtn.addEventListener('click', async () => {
       els.warmupBtn.disabled = true;
@@ -2511,6 +2129,7 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
         document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        if (btn.dataset.tab === 'store') loadStore();
       });
     });
 
@@ -2702,59 +2321,305 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
       );
     });
 
-    els.copyBaseUrlBtn.addEventListener('click', async () => {
-      const ok = await copyText(`${window.location.origin}/v1`);
-      flashButtonLabel(els.copyBaseUrlBtn, 'Salin', ok);
-    });
 
-    document.querySelectorAll('[data-copy-target]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const targetId = btn.getAttribute('data-copy-target');
-        const code = document.getElementById(targetId)?.textContent || '';
-        const ok = await copyText(code);
-        flashButtonLabel(btn, 'Salin Kode', ok);
-      });
-    });
+    /* ---------------------------------------------------------------
+       Model Store: katalog GGUF (simpan) + isi storage (hapus/muat)
+       --------------------------------------------------------------- */
+    const storeState = { loading: false, data: null };
 
-    els.testModelsBtn.addEventListener('click', async () => {
-      els.liveApiOutput.textContent = 'Memanggil GET /v1/models ...';
-      try {
-        const t0 = performance.now();
-        const res = await fetch('/v1/models');
-        const json = await res.json();
-        const ms = Math.round(performance.now() - t0);
-        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
-      } catch (err) {
-        els.liveApiOutput.textContent = `Error: ${err.message}`;
+    function storeStatusText(caps = {}) {
+      if (caps.can_save) {
+        const prefix = caps.prefix ? `/${String(caps.prefix).replace(/\/+$/, '')}` : '';
+        return `Storage aktif: s3://${caps.bucket}${prefix} — simpan dan hapus model langsung dari halaman ini.`;
       }
-    });
+      return caps.reason || 'Storage belum dikonfigurasi.';
+    }
 
-    els.testChatApiBtn.addEventListener('click', async () => {
-      els.liveApiOutput.textContent = `Memanggil POST /v1/chat/completions (${state.selectedModel}) ...`;
+    function makeStoreCard({ title, meta, tag, actions = [] }) {
+      const card = document.createElement('div');
+      card.className = 'store-card';
+
+      const main = document.createElement('div');
+      main.className = 'store-card-main';
+      const titleEl = document.createElement('strong');
+      titleEl.textContent = title;
+      titleEl.title = title;
+      const metaEl = document.createElement('span');
+      metaEl.className = 'store-card-meta';
+      metaEl.textContent = meta;
+      main.append(titleEl, metaEl);
+
+      const actionWrap = document.createElement('div');
+      actionWrap.className = 'store-card-actions';
+      if (tag) {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'store-tag';
+        tagEl.textContent = tag;
+        actionWrap.appendChild(tagEl);
+      }
+      for (const action of actions) actionWrap.appendChild(action);
+
+      card.append(main, actionWrap);
+      return card;
+    }
+
+    function makeStoreButton(label, className, onClick) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = className;
+      button.textContent = label;
+      button.addEventListener('click', onClick);
+      return button;
+    }
+
+    function storeEmptyState(target, message) {
+      target.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'store-empty';
+      empty.textContent = message;
+      target.appendChild(empty);
+    }
+
+    function formatStoreSize(mb) {
+      return mb ? `${Math.round(mb)} MB` : 'ukuran tidak diketahui';
+    }
+
+    function renderStore() {
+      const data = storeState.data;
+      const caps = data?.capabilities || {};
+
+      els.storeStatusText.textContent = storeStatusText(caps);
+      els.storeStatusText.className = `store-status ${caps.can_save ? 'ok' : 'warn'}`;
+
+      const catalog = data?.catalog || [];
+      const objects = data?.objects || [];
+
+      els.storeCatalogCount.textContent = caps.can_list === false
+        ? 'tidak diketahui'
+        : `${catalog.filter((item) => item.in_storage).length}/${catalog.length} tersimpan`;
+      els.storeObjectsCount.textContent = `${objects.length} berkas`;
+
+      // Katalog model yang bisa disimpan
+      els.storeCatalogList.innerHTML = '';
+      if (!catalog.length) {
+        storeEmptyState(els.storeCatalogList, 'Katalog kosong.');
+      }
+      for (const item of catalog) {
+        const meta = [formatStoreSize(item.size_mb), item.quantization, item.parameters]
+          .filter(Boolean)
+          .join(' · ');
+
+        const actions = [];
+        if (item.in_storage) {
+          actions.push(
+            makeStoreButton('Ganti', 'secondary-btn sm', (event) => saveModelToStore(item, event.currentTarget))
+          );
+        } else if (caps.can_save) {
+          actions.push(
+            makeStoreButton('Simpan', 'secondary-btn sm', (event) => saveModelToStore(item, event.currentTarget))
+          );
+        }
+
+        els.storeCatalogList.appendChild(
+          makeStoreCard({
+            title: item.name || item.id,
+            meta,
+            tag: item.in_storage ? '✓ di storage' : null,
+            actions,
+          })
+        );
+      }
+
+      // Berkas yang sudah ada di storage
+      els.storeObjectsList.innerHTML = '';
+      if (!caps.can_list) {
+        storeEmptyState(els.storeObjectsList, caps.reason || 'Daftar berkas tidak tersedia.');
+      } else if (!objects.length) {
+        storeEmptyState(els.storeObjectsList, 'Belum ada model di storage. Simpan dari katalog di sebelah kiri.');
+      }
+      for (const object of objects) {
+        const meta = [
+          formatStoreSize(object.size_mb),
+          object.last_modified ? new Date(object.last_modified).toLocaleDateString('id-ID') : null,
+          object.matched_model ? 'cocok dengan katalog' : 'tidak ada di katalog',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
+        const actions = [];
+        if (object.matched_model) {
+          actions.push(
+            makeStoreButton('Muat', 'secondary-btn sm', () => {
+              selectChatModel(object.matched_model);
+              document.querySelector('.tab-btn[data-tab="chat"]')?.click();
+            })
+          );
+        }
+        if (caps.can_delete) {
+          actions.push(
+            makeStoreButton('Hapus', 'danger-btn', (event) => deleteStoreObject(object, event.currentTarget))
+          );
+        }
+
+        els.storeObjectsList.appendChild(
+          makeStoreCard({
+            title: object.name || object.key,
+            meta,
+            tag: object.size_mb ? null : 'ukuran ?',
+            actions,
+          })
+        );
+      }
+
+      if (data?.errors?.length) {
+        els.storeStatusText.textContent = `${storeStatusText(caps)} (${data.errors
+          .map((err) => err.message)
+          .join('; ')})`;
+        els.storeStatusText.className = 'store-status warn';
+      }
+    }
+
+    async function loadStore() {
+      if (storeState.loading) return;
+      storeState.loading = true;
+      els.storeRefreshBtn.disabled = true;
       try {
-        const t0 = performance.now();
-        const res = await fetch('/v1/chat/completions', {
+        const res = await fetch('/api/store', { cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+        storeState.data = json;
+        renderStore();
+      } catch (err) {
+        storeState.data = null;
+        els.storeStatusText.textContent = `Gagal memuat Model Store: ${err.message}`;
+        els.storeStatusText.className = 'store-status warn';
+        storeEmptyState(els.storeCatalogList, 'Tidak bisa memuat katalog.');
+        storeEmptyState(els.storeObjectsList, 'Tidak bisa memuat isi storage.');
+        els.storeCatalogCount.textContent = '—';
+        els.storeObjectsCount.textContent = '—';
+      } finally {
+        storeState.loading = false;
+        els.storeRefreshBtn.disabled = false;
+      }
+    }
+
+    async function saveModelToStore(item, button) {
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Menyimpan...';
+      }
+      els.storeStatusText.textContent = `Menyalin ${item.name || item.id} ke storage... (bisa 1–3 menit)`;
+      els.storeStatusText.className = 'store-status ok';
+
+      try {
+        const res = await fetch('/api/store/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: state.selectedModel,
-            messages: [{ role: 'user', content: 'Sapa pengguna dalam satu kalimat singkat Bahasa Indonesia!' }],
-            max_tokens: 64,
-            stream: false,
-          }),
+          body: JSON.stringify({ model: item.id }),
         });
-        const json = await res.json();
-        const ms = Math.round(performance.now() - t0);
-        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
-        fetchModelsAndHealth();
-      } catch (err) {
-        els.liveApiOutput.textContent = `Error: ${err.message}`;
-      }
-    });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
 
-    populateSnippets();
+        await loadStore();
+        els.storeStatusText.textContent = json.skipped
+          ? `${item.name || item.id} sudah ada di storage.`
+          : `${item.name || item.id} tersimpan di storage (${formatStoreSize(
+              json.bytes ? json.bytes / (1024 * 1024) : json.size_mb
+            )}, ${Math.round((json.duration_ms || 0) / 1000)} dtk).`;
+        els.storeStatusText.className = 'store-status ok';
+      } catch (err) {
+        els.storeStatusText.textContent = `Gagal menyimpan ${item.id}: ${err.message}`;
+        els.storeStatusText.className = 'store-status warn';
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Simpan';
+        }
+      }
+    }
+
+    async function deleteStoreObject(object, button) {
+      const label = object.name || object.key;
+      if (typeof window.confirm === 'function' && !window.confirm(`Hapus ${label} dari storage?`)) return;
+
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Menghapus...';
+      }
+
+      try {
+        const res = await fetch('/api/store/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: object.key }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json.ok) throw new Error(json?.error?.message || `HTTP ${res.status}`);
+
+        await loadStore();
+        els.storeStatusText.textContent = `${label} dihapus dari storage.`;
+        els.storeStatusText.className = 'store-status ok';
+      } catch (err) {
+        els.storeStatusText.textContent = `Gagal menghapus ${label}: ${err.message}`;
+        els.storeStatusText.className = 'store-status warn';
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Hapus';
+        }
+      }
+    }
+
+    /* ---------------------------------------------------------------
+       Daftar model yang tersedia, tampil langsung di tab Chat
+       --------------------------------------------------------------- */
+    function renderChatModelBar() {
+      if (!els.chatModelBar) return;
+      const models = state.models || [];
+
+      els.chatModelBar.innerHTML = '';
+      if (!models.length) {
+        els.chatModelBar.classList.add('hidden');
+        return;
+      }
+      els.chatModelBar.classList.remove('hidden');
+
+      for (const model of models) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `model-chip${state.selectedModel === model.id ? ' active' : ''}`;
+        chip.title = `${model.name || model.id} · ${model.size_mb || '?'} MB`;
+        chip.addEventListener('click', () => selectChatModel(model.id));
+
+        const label = document.createElement('span');
+        label.textContent = model.id;
+
+        const tag = document.createElement('span');
+        tag.className = 'model-chip-tag';
+        tag.textContent = model.loaded_in_ram
+          ? 'RAM'
+          : model.storage_source === 's3' || model.storage_source === 'blob'
+            ? 'storage'
+            : model.cached_on_tmp
+              ? '/tmp'
+              : 'unduh';
+
+        chip.append(label, tag);
+        els.chatModelBar.appendChild(chip);
+      }
+    }
+
+    function selectChatModel(modelId) {
+      state.selectedModel = modelId;
+      renderModelCards();
+      renderChatModelBar();
+    }
+
+    els.storeRefreshBtn.addEventListener('click', loadStore);
+
+    els.domainText.textContent = window.location.host || 'preview';
+
     renderModelCards();
-    loadTools().finally(populateSnippets);
+    loadTools();
+    loadStore();
     fetchModelsAndHealth().finally(startRealtimeTelemetry);
   </script>
 </body>

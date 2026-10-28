@@ -49,13 +49,16 @@ Seluruh endpoint sudah dilengkapi header `Access-Control-Allow-Origin: *` sehing
 
 | Method | Endpoint | Deskripsi |
 |---|---|---|
-| `GET` | `/` | Web Chat UI Playground & API Tester |
+| `GET` | `/` | Web Chat UI (tab Chat + tab Model Store) |
 | `GET` | `/api/health` | Status container (`warm`/`cold`), penggunaan RAM (`RSS`), & sisa ruang `/tmp` |
 | `POST` | `/api/warmup` | Preload model GGUF ke RAM container |
 | `GET` | `/v1/models` | Daftar model kompatibel OpenAI SDK |
 | `POST` | `/v1/chat/completions` | Chat Completions OpenAI (`stream: true` SSE & `stream: false` JSON) |
 | `GET` | `/api/storage` | Konfigurasi sumber model (S3 / Blob / base URL) tanpa membocorkan secret |
 | `GET` | `/api/storage/check` | Verifikasi objek GGUF benar-benar ada di storage (Range 1 byte) |
+| `GET` | `/api/store` | Katalog model GGUF + isi bucket (mana yang sudah tersimpan) |
+| `POST` | `/api/store/save` | Salin model dari katalog ke storage (`{ model, force? }`) |
+| `POST` | `/api/store/delete` | Hapus objek model dari storage (`{ key }`) |
 | `GET` | `/api/tags` | Daftar model kompatibel Ollama |
 | `POST` | `/api/generate` | Endpoint generasi kompatibel Ollama |
 
@@ -188,6 +191,63 @@ curl -s https://lollm-psi.vercel.app/api/storage/check | jq '.results'
 `/api/storage/check` melakukan `GET` dengan `Range: bytes=0-0` ke objek tiap model,
 lalu melaporkan `ok`, status HTTP, dan ukuran file — cukup untuk memastikan bucket,
 kredensial, prefix, dan nama file sudah benar.
+
+## Model Store (tab di Web UI)
+
+Tab **Model Store** di halaman utama menggantikan panel dokumentasi/tester endpoint
+yang lama. Isinya dua kolom:
+
+- **Katalog** — semua model GGUF yang dikenal aplikasi, lengkap dengan ukuran dan
+  kuantisasi. Tombol **Simpan** menyalin file dari sumber (Hugging Face) ke bucket
+  S3 Anda, sehingga request berikutnya memakai storage sendiri dan tidak bergantung
+  pada Hugging Face.
+- **Di storage** — objek `.gguf` yang benar-benar ada di bucket, dengan tombol
+  **Muat** (menjadikannya model aktif di tab Chat) dan **Hapus**.
+
+Di tab **Chat**, daftar model yang tersedia ditampilkan sebagai chip tepat di atas
+kotak pesan; chip terpilih dipakai sebagai `model` pada request `/v1/chat/completions`.
+
+### Kontrak endpoint
+
+```bash
+# Ringkasan katalog + isi bucket
+curl -s https://lollm-psi.vercel.app/api/store | jq '{capabilities, catalog: [.catalog[] | {id, in_storage}]}'
+
+# Simpan satu model (pakai force: true untuk menimpa)
+curl -s -X POST https://lollm-psi.vercel.app/api/store/save \
+  -H "Content-Type: application/json" \
+  -d '{"model":"smollm2-360m-instruct"}'
+
+# Hapus satu objek (hanya di dalam prefix LLM_S3_PREFIX dan berakhiran .gguf)
+curl -s -X POST https://lollm-psi.vercel.app/api/store/delete \
+  -H "Content-Type: application/json" \
+  -d '{"key":"models/SmolLM2-360M-Instruct-Q4_K_M.gguf"}'
+```
+
+`GET /api/store` mengembalikan:
+
+```jsonc
+{
+  "ok": true,
+  "capabilities": { "can_list": true, "can_save": true, "can_delete": true,
+                    "bucket": "lollm-models", "prefix": "models", "reason": null },
+  "catalog": [{ "id": "qwen2.5-0.5b-instruct", "size_mb": 379,
+                "in_storage": true, "storage_key": "models/…gguf" }],
+  "objects": [{ "key": "models/…gguf", "size_mb": 379, "last_modified": "…",
+                "matched_model": "qwen2.5-0.5b-instruct" }],
+  "truncated": false,
+  "errors": []
+}
+```
+
+Catatan perilaku:
+
+- `in_storage` bernilai `null` bila daftar bucket gagal dibaca — bukan `false` —
+  supaya UI bisa membedakan "belum tersimpan" dari "tidak tahu".
+- Tanpa kredensial S3, ketiga endpoint tetap menjawab dengan `capabilities.reason`
+  dan `can_save`/`can_delete`/`can_list` = `false` (tulis/hapus → HTTP `501`).
+- URL presigned di-redact query-nya sebelum ditampilkan; kredensial tidak pernah
+  dikirim ke klien.
 
 ### Catatan performa
 

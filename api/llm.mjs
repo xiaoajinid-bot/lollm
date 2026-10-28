@@ -4,6 +4,7 @@ import {
   MODEL_CATALOG,
   ensureModelLoaded,
   getSystemHealth,
+  resolveModelSpec,
   runChatInference,
 } from '../lib/llm-engine.mjs';
 import { executeToolCall, getToolRegistry, listTools } from '../lib/tools.mjs';
@@ -12,6 +13,11 @@ import {
   modelSourcePlan,
   probeModelSource,
 } from '../lib/model-storage.mjs';
+import {
+  deleteStoredModel,
+  saveModelToStorage,
+  storeOverview,
+} from '../lib/model-store.mjs';
 import { runToolAgent } from '../lib/agent.mjs';
 import {
   UTCP_MANUAL_VERSION,
@@ -33,6 +39,9 @@ const AVAILABLE_ENDPOINTS = [
   'GET /v1/models',
   'GET /api/storage',
   'GET /api/storage/check',
+  'GET /api/store',
+  'POST /api/store/save',
+  'POST /api/store/delete',
   'POST /v1/chat/completions',
   'GET /api/tools',
   'POST /api/tools',
@@ -192,6 +201,45 @@ export default async function handler(req, res) {
         storage,
         results,
       });
+      return;
+    }
+
+    // 1d. Model Store: katalog + isi bucket + kemampuan storage
+    if (req.method === 'GET' && route === '/api/store') {
+      const overview = await storeOverview({ env: process.env, catalog: MODEL_CATALOG });
+      sendJson(res, 200, overview);
+      return;
+    }
+
+    // 1e. Simpan model katalog ke storage (stream sumber -> bucket)
+    if (req.method === 'POST' && route === '/api/store/save') {
+      const body = await readJsonBody(req);
+      const spec = resolveModelSpec(String(body.model || body.id || ''));
+      if (!spec) {
+        sendJson(res, 404, {
+          ok: false,
+          error: {
+            message: `Model "${body.model}" tidak dikenal.`,
+            available: MODEL_CATALOG.map((item) => item.id),
+          },
+        });
+        return;
+      }
+
+      const result = await saveModelToStorage({
+        spec,
+        env: process.env,
+        force: Boolean(body.force),
+      });
+      sendJson(res, 200, { ok: true, model: spec.id, ...result });
+      return;
+    }
+
+    // 1f. Hapus objek model dari storage
+    if (req.method === 'POST' && route === '/api/store/delete') {
+      const body = await readJsonBody(req);
+      const result = await deleteStoredModel({ key: body.key, env: process.env });
+      sendJson(res, 200, { ok: true, ...result });
       return;
     }
 

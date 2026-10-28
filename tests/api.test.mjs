@@ -590,3 +590,112 @@ test('GET /api/storage/check mengembalikan 502 bila objek tidak bisa diakses', a
     assert.ok(res.json.results[0].error);
   });
 });
+
+/* ----------------------------------------------------------- model store */
+
+test('GET /api/store tanpa storage: katalog tetap tampil, aksi dinonaktifkan', async () => {
+  resetStub();
+  await withEnv({ LLM_S3_BUCKET: '', LLM_BLOB_BASE_URL: '', LLM_MODEL_BASE_URL: '' }, async () => {
+    const res = await call({ method: 'GET', url: '/api/llm?__route=api/store' });
+    assert.equal(res.statusCode, 200);
+
+    const body = res.json;
+    assert.equal(body.capabilities.can_save, false);
+    assert.match(body.capabilities.reason, /LLM_S3_BUCKET/);
+    assert.equal(body.catalog.length, 1);
+    assert.equal(body.catalog[0].id, 'qwen2.5-0.5b-instruct');
+    assert.deepEqual(body.objects, []);
+  });
+});
+
+test('POST /api/store/save menolak model yang tidak dikenal', async () => {
+  resetStub();
+  const res = await call({
+    method: 'POST',
+    url: '/api/llm?__route=api/store/save',
+    body: { model: 'model-tidak-ada' },
+  });
+
+  assert.equal(res.statusCode, 404);
+  assert.match(res.json.error.message, /tidak dikenal/);
+  assert.deepEqual(res.json.error.available, ['qwen2.5-0.5b-instruct']);
+});
+
+test('POST /api/store/save memberi 501 saat storage belum dikonfigurasi', async () => {
+  resetStub();
+  await withEnv({ LLM_S3_BUCKET: '', LLM_BLOB_BASE_URL: '', LLM_MODEL_BASE_URL: '' }, async () => {
+    const res = await call({
+      method: 'POST',
+      url: '/api/llm?__route=api/store/save',
+      body: { model: 'qwen2.5-0.5b-instruct' },
+    });
+    assert.equal(res.statusCode, 501);
+    assert.match(res.json.error.message, /LLM_S3_BUCKET/);
+  });
+});
+
+test('POST /api/store/delete menolak kunci di luar prefix', async () => {
+  resetStub();
+  await withEnv(
+    {
+      LLM_S3_BUCKET: 'lollm-models',
+      LLM_S3_ACCESS_KEY_ID: 'AKIA-UJI',
+      LLM_S3_SECRET_ACCESS_KEY: 'SECRET-UJI',
+      LLM_S3_PREFIX: 'models/',
+    },
+    async () => {
+      const res = await call({
+        method: 'POST',
+        url: '/api/llm?__route=api/store/delete',
+        body: { key: 'lain/model.gguf' },
+      });
+      assert.equal(res.statusCode, 400);
+      assert.match(res.json.error.message, /prefix/);
+    }
+  );
+});
+
+test('GET /api/store menandai model yang sudah ada di bucket', async () => {
+  resetStub();
+  const server = http.createServer((req, res) => {
+    if (req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/xml' });
+      res.end(
+        '<ListBucketResult>' +
+          '<Contents><Key>models/stub.gguf</Key><LastModified>2026-10-20T10:00:00.000Z</LastModified><Size>397284474</Size></Contents>' +
+          '<IsTruncated>false</IsTruncated>' +
+          '</ListBucketResult>'
+      );
+      return;
+    }
+    res.writeHead(204).end();
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+
+  try {
+    await withEnv(
+      {
+        LLM_S3_BUCKET: 'lollm-models',
+        LLM_S3_ENDPOINT: `http://127.0.0.1:${port}`,
+        LLM_S3_FORCE_PATH_STYLE: 'true',
+        LLM_S3_ACCESS_KEY_ID: 'AKIA-UJI',
+        LLM_S3_SECRET_ACCESS_KEY: 'SECRET-UJI',
+        LLM_S3_PREFIX: 'models/',
+      },
+      async () => {
+        const res = await call({ method: 'GET', url: '/api/llm?__route=api/store' });
+        assert.equal(res.statusCode, 200);
+
+        const body = res.json;
+        assert.equal(body.capabilities.can_save, true);
+        assert.equal(body.catalog[0].in_storage, true);
+        assert.equal(body.objects.length, 1);
+        assert.equal(body.objects[0].matched_model, 'qwen2.5-0.5b-instruct');
+        assert.ok(body.objects[0].download_url.includes('X-Amz-Signature='));
+      }
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

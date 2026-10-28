@@ -22,6 +22,18 @@ export const MODEL_CATALOG = [
   },
 ];
 
+export function resolveModelSpec(requestedId) {
+  if (!requestedId) return MODEL_CATALOG[0];
+  const normalized = String(requestedId).trim().toLowerCase();
+  return (
+    MODEL_CATALOG.find(
+      (item) =>
+        item.id.toLowerCase() === normalized ||
+        (item.aliases || []).some((alias) => alias.toLowerCase() === normalized)
+    ) || null
+  );
+}
+
 export async function ensureModelLoaded() {
   return { spec: MODEL_CATALOG[0], model: null, context: null, coldLoad: false, loadMs: 0 };
 }

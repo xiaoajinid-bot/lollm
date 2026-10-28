@@ -179,6 +179,66 @@ const FIXTURES = {
     },
   },
   storageCheck: { ok: true, results: [{ id: 'qwen2.5-0.5b-instruct', ok: true, status: 206, size_mb: 379 }] },
+  store: {
+    ok: true,
+    capabilities: {
+      can_list: true,
+      can_save: true,
+      can_delete: true,
+      presign: true,
+      bucket: 'lollm-models',
+      region: 'ap-southeast-2',
+      prefix: 'models',
+      reason: null,
+    },
+    storage: { mode: 'auto', configured: true },
+    catalog: [
+      {
+        id: 'qwen2.5-0.5b-instruct',
+        name: 'Qwen 2.5 0.5B Instruct',
+        size_mb: 379,
+        quantization: 'Q4_K_M',
+        in_storage: true,
+        stored_size_mb: 379,
+        storage_key: 'models/qwen2.5-0.5b-instruct.gguf',
+      },
+      {
+        id: 'smollm2-360m-instruct',
+        name: 'SmolLM2 360M Instruct',
+        size_mb: 258,
+        quantization: 'Q4_K_M',
+        in_storage: false,
+        stored_size_mb: null,
+        storage_key: null,
+      },
+      {
+        id: 'llama-3.2-1b-instruct',
+        name: 'Llama 3.2 1B Instruct',
+        size_mb: 807,
+        in_storage: false,
+        stored_size_mb: null,
+        storage_key: null,
+      },
+    ],
+    objects: [
+      {
+        key: 'models/qwen2.5-0.5b-instruct.gguf',
+        name: 'qwen2.5-0.5b-instruct.gguf',
+        size_mb: 379,
+        last_modified: '2026-10-20T10:00:00.000Z',
+        matched_model: 'qwen2.5-0.5b-instruct',
+      },
+      {
+        key: 'models/lama.gguf',
+        name: 'lama.gguf',
+        size_mb: 640,
+        last_modified: '2026-09-01T10:00:00.000Z',
+        matched_model: null,
+      },
+    ],
+    truncated: false,
+    errors: [],
+  },
   utcp: {
     ok: true,
     utcp_version: '1.0.0',
@@ -189,7 +249,8 @@ const FIXTURES = {
 };
 
 /** Bangun halaman dengan fetch distub. `chat` bisa diubah di tengah test. */
-async function createApp({ mobile = false, chat = {} } = {}) {
+async function createApp({ mobile = false, chat = {}, store = null, confirm = true } = {}) {
+  const storeData = store || FIXTURES.store;
   const calls = [];
   const dom = new JSDOM(html, {
     url: 'https://lollm.test/',
@@ -210,6 +271,7 @@ async function createApp({ mobile = false, chat = {} } = {}) {
       });
       window.visualViewport = undefined;
       window.scrollTo = () => {};
+      window.confirm = () => confirm;
 
       window.fetch = async (input, init = {}) => {
         const url = typeof input === 'string' ? input : input.url;
@@ -220,6 +282,9 @@ async function createApp({ mobile = false, chat = {} } = {}) {
         if (url === '/api/health') return json(FIXTURES.health);
         if (url === '/api/utcp') return json(FIXTURES.utcp);
         if (url === '/api/storage') return json(FIXTURES.storage);
+        if (url === '/api/store') return json(storeData);
+        if (url === '/api/store/save') return json({ ok: true, model: JSON.parse(init.body).model, bytes: 268435456, key: 'models/x.gguf', duration_ms: 1200 });
+        if (url === '/api/store/delete') return json({ ok: true, key: JSON.parse(init.body).key, status: 204 });
         if (url === '/api/storage/check') return json(FIXTURES.storageCheck);
         if (url.startsWith('/api/warmup')) {
           return json({ name: 'qwen2.5-0.5b-instruct', cold_load: false, load_ms: 10, health: FIXTURES.health });
@@ -293,10 +358,11 @@ async function createApp({ mobile = false, chat = {} } = {}) {
     rows.find((r) => r.classList.contains('unavailable'))?.querySelector('input').disabled === true
   );
   assert('load: domain ditampilkan', doc.getElementById('domainText').textContent === 'lollm.test');
-  assert('load: snippet UTCP terisi', doc.getElementById('utcpSnippet').textContent.includes('/.well-known/utcp'));
+  assert('load: /api/store dipanggil', calls.some((c) => c.url === '/api/store'));
   assert('load: status server warm', doc.getElementById('serverStatusPill').textContent.includes('Warm'));
   assert('load: metrik RAM terisi', doc.getElementById('ramMetric').textContent === '512 MB');
   assert('load: model card dirender dari /v1/models', doc.querySelectorAll('#modelList .model-card').length === 2);
+  assert('load: bar model di tab chat terisi', doc.querySelectorAll('#chatModelBar .model-chip').length === 2);
 }
 
 /* 2. Preferensi tool */
@@ -416,38 +482,102 @@ async function createApp({ mobile = false, chat = {} } = {}) {
   assert('clear: empty state tampil lagi', !doc.getElementById('emptyState').classList.contains('hidden'));
 }
 
-/* 6. Tab, snippet, salin, tester endpoint */
+/* 6. Tab Model Store: katalog, simpan, hapus */
 {
-  const { doc, window } = await createApp();
+  const { doc, window, calls } = await createApp();
 
-  [...doc.querySelectorAll('.tab-btn')].find((b) => b.dataset.tab === 'api').dispatchEvent(
-    new window.Event('click', { bubbles: true })
-  );
-  assert('tab: tab API aktif', doc.getElementById('tab-api').classList.contains('active'));
-  assert('tab: tab chat tidak aktif', !doc.getElementById('tab-chat').classList.contains('active'));
+  const storeTab = [...doc.querySelectorAll('.tab-btn')].find((b) => b.dataset.tab === 'store');
+  assert('store: tab Model Store tersedia', Boolean(storeTab));
+  storeTab.dispatchEvent(new window.Event('click', { bubbles: true }));
 
-  assert('snippet: curl memakai origin halaman', doc.getElementById('curlSnippet').textContent.includes('https://lollm.test/v1/chat/completions'));
-  assert('snippet: python memakai model terpilih', doc.getElementById('pythonSnippet').textContent.includes('qwen2.5-0.5b-instruct'));
-
-  doc.querySelectorAll('#modelList .model-card')[1].dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert('store: tab Model Store aktif', doc.getElementById('tab-store').classList.contains('active'));
+  assert('store: tab chat tidak aktif', !doc.getElementById('tab-chat').classList.contains('active'));
   assert(
-    'model: memilih model memperbarui snippet',
-    doc.getElementById('curlSnippet').textContent.includes('smollm2-360m-instruct')
+    'store: status menyebut bucket & prefix',
+    await waitFor(
+      () =>
+        doc.getElementById('storeStatusText').textContent.includes('lollm-models') &&
+        doc.getElementById('storeStatusText').textContent.includes('/models')
+    ),
+    doc.getElementById('storeStatusText').textContent
+  );
+  assert(
+    'store: counter katalog menunjukkan 1/3 tersimpan',
+    doc.getElementById('storeCatalogCount').textContent === '1/3 tersimpan',
+    doc.getElementById('storeCatalogCount').textContent
+  );
+  assert(
+    'store: counter storage menunjukkan 2 berkas',
+    doc.getElementById('storeObjectsCount').textContent === '2 berkas',
+    doc.getElementById('storeObjectsCount').textContent
   );
 
-  doc.execCommand = () => true;
-  const copyBtn = doc.querySelector('[data-copy-target="utcpSnippet"]');
-  copyBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
-  await tick(30);
-  assert('copy: label tombol berubah jadi "Tersalin!"', copyBtn.textContent === 'Tersalin!');
+  const cards = [...doc.querySelectorAll('#storeCatalogList .store-card')];
+  assert('store: 3 kartu katalog dirender', cards.length === 3, `${cards.length} kartu`);
+  assert('store: model yang sudah ada ditandai di storage', cards[0].textContent.includes('di storage'));
 
-  doc.getElementById('testToolsBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
-  await waitFor(() => doc.getElementById('liveApiOutput').textContent.includes('HTTP 200'));
-  assert('tester: GET /api/tools menampilkan respons', doc.getElementById('liveApiOutput').textContent.includes('HTTP 200'));
+  const saveBtn = [...cards[1].querySelectorAll('button')].find((b) => b.textContent === 'Simpan');
+  assert('store: model belum tersimpan punya tombol Simpan', Boolean(saveBtn));
 
-  doc.getElementById('testUtcpBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
-  await waitFor(() => doc.getElementById('liveApiOutput').textContent.includes('"utcp_version"'));
-  assert('tester: GET /api/utcp menampilkan manual', doc.getElementById('liveApiOutput').textContent.includes('"utcp_version"'));
+  saveBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert('store: Simpan memanggil POST /api/store/save', await waitFor(() => calls.some((c) => c.url === '/api/store/save')));
+  assert(
+    'store: body Simpan memuat id model',
+    JSON.parse(calls.find((c) => c.url === '/api/store/save').body).model === 'smollm2-360m-instruct'
+  );
+  assert(
+    'store: status sukses ditampilkan setelah Simpan',
+    await waitFor(() => doc.getElementById('storeStatusText').textContent.includes('tersimpan di storage'))
+  );
+
+  const objects = [...doc.querySelectorAll('#storeObjectsList .store-card')];
+  assert('store: 2 berkas storage dirender', objects.length === 2, `${objects.length} berkas`);
+  assert(
+    'store: berkas yang cocok katalog punya tombol Muat',
+    [...objects[0].querySelectorAll('button')].some((b) => b.textContent === 'Muat')
+  );
+
+  const delBtn = [...objects[1].querySelectorAll('button')].find((b) => b.textContent === 'Hapus');
+  assert('store: berkas storage punya tombol Hapus', Boolean(delBtn));
+  delBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert('store: Hapus memanggil POST /api/store/delete', await waitFor(() => calls.some((c) => c.url === '/api/store/delete')));
+  assert(
+    'store: body Hapus memuat key berkas',
+    JSON.parse(calls.find((c) => c.url === '/api/store/delete').body).key === 'models/lama.gguf'
+  );
+}
+
+/* 6b. Hapus tidak jalan kalau konfirmasi dibatalkan */
+{
+  const { doc, window, calls } = await createApp({ confirm: false });
+  const delBtn = [...doc.querySelectorAll('#storeObjectsList button')].find((b) => b.textContent === 'Hapus');
+
+  assert('store: tombol Hapus dirender saat konfirmasi ditolak', Boolean(delBtn));
+  delBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await tick(60);
+  assert('store: batal konfirmasi tidak memanggil /api/store/delete', !calls.some((c) => c.url === '/api/store/delete'));
+}
+
+/* 6c. Daftar model di tab chat */
+{
+  const { doc, window, calls } = await createApp();
+  const chips = [...doc.querySelectorAll('#chatModelBar .model-chip')];
+
+  assert('model bar: chip dirender dari /v1/models', chips.length === 2, `${chips.length} chip`);
+  assert('model bar: chip model aktif ditandai', chips[0].classList.contains('active'));
+
+  chips[1].dispatchEvent(new window.Event('click', { bubbles: true }));
+  assert(
+    'model bar: klik chip memindahkan pilihan',
+    [...doc.querySelectorAll('#chatModelBar .model-chip')][1].classList.contains('active')
+  );
+
+  doc.getElementById('promptInput').value = 'Halo';
+  doc.getElementById('chatForm').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await waitFor(() => doc.getElementById('sendBtn').disabled === false, { timeout: 4000 });
+
+  const body = JSON.parse(calls.find((c) => c.url === '/v1/chat/completions').body);
+  assert('model bar: model terpilih dikirim ke server', body.model === 'smollm2-360m-instruct', body.model);
 }
 
 /* 7. Drawer mobile */
@@ -484,24 +614,10 @@ async function createApp({ mobile = false, chat = {} } = {}) {
   assert('keyboard: Enter mengirim pesan (desktop)', (await waitFor(() => doc.querySelectorAll('.msg-row').length >= 1)) && evt.defaultPrevented);
 }
 
-/* 9. Regresi: label salin & chip domain harus pulih setelah klik ganda */
+/* 9. Regresi: label chip domain harus pulih setelah klik ganda */
 {
   const { doc, window } = await createApp();
   doc.execCommand = () => true;
-
-  const copyBtn = doc.querySelector('[data-copy-target="utcpSnippet"]');
-  copyBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
-  await tick(120);
-  copyBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
-  await tick(1700);
-  assert('regresi: label tombol salin pulih setelah klik ganda', copyBtn.textContent === 'Salin Kode', copyBtn.textContent);
-
-  const baseBtn = doc.getElementById('copyBaseUrlBtn');
-  baseBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
-  await tick(120);
-  baseBtn.dispatchEvent(new window.Event('click', { bubbles: true }));
-  await tick(1700);
-  assert('regresi: label Base URL pulih setelah klik ganda', baseBtn.textContent === 'Salin', baseBtn.textContent);
 
   const chip = doc.getElementById('publicDomainChip');
   const domainText = doc.getElementById('domainText');
@@ -558,30 +674,54 @@ async function createApp({ mobile = false, chat = {} } = {}) {
   );
 }
 
-/* 12. Panel sumber model & endpoint penyimpanan */
+/* 12. Panel sumber model & store tanpa kredensial */
 {
-  const { doc, window } = await createApp();
+  const { doc } = await createApp();
 
   assert(
     'storage: hint sumber model menyebut mode auto',
     doc.getElementById('modelSourceHint').textContent.includes('auto'),
     doc.getElementById('modelSourceHint').textContent
   );
-  assert(
-    'storage: snippet S3 terisi',
-    doc.getElementById('storageSnippet').textContent.includes('LLM_S3_BUCKET') &&
-      doc.getElementById('storageSnippet').textContent.includes('LLM_BLOB_BASE_URL')
-  );
-  assert(
-    'storage: pill endpoint /api/storage ada',
-    [...doc.querySelectorAll('.ep-pill code')].some((code) => code.textContent === '/api/storage')
-  );
+}
 
-  doc.getElementById('testStorageBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
-  await waitFor(() => doc.getElementById('liveApiOutput').textContent.includes('HTTP 200'));
+{
+  const storeOff = {
+    ok: true,
+    capabilities: {
+      can_list: false,
+      can_save: false,
+      can_delete: false,
+      presign: false,
+      bucket: null,
+      prefix: 'models',
+      reason: 'Kredensial S3 belum diset (LLM_S3_BUCKET / LLM_S3_ACCESS_KEY_ID).',
+    },
+    storage: { mode: 'auto', configured: false },
+    catalog: FIXTURES.store.catalog,
+    objects: [],
+    truncated: false,
+    errors: [],
+  };
+  const { doc } = await createApp({ store: storeOff });
+
   assert(
-    'storage: tester menampilkan konfigurasi bucket',
-    doc.getElementById('liveApiOutput').textContent.includes('lollm-models')
+    'store: tanpa kredensial menampilkan alasan',
+    doc.getElementById('storeStatusText').textContent.includes('Kredensial S3 belum diset'),
+    doc.getElementById('storeStatusText').textContent
+  );
+  assert(
+    'store: tombol Simpan tidak dirender tanpa can_save',
+    ![...doc.querySelectorAll('#storeCatalogList button')].some((b) => b.textContent === 'Simpan')
+  );
+  assert(
+    'store: daftar storage menjelaskan keterbatasan',
+    doc.getElementById('storeObjectsList').textContent.includes('Kredensial S3 belum diset')
+  );
+  assert(
+    'store: counter katalog jadi "tidak diketahui"',
+    doc.getElementById('storeCatalogCount').textContent === 'tidak diketahui',
+    doc.getElementById('storeCatalogCount').textContent
   );
 }
 
