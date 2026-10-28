@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local LLM on Vercel — llama.cpp GGUF Serverless & Public API</title>
+  <style>
+    :root {
+      --bg-root: #090b10;
+      --bg-sidebar: #0f1219;
+      --bg-surface: #151923;
+      --bg-surface-hover: #1c2230;
+      --bg-elevated: #1e2534;
+      --border: #252d3d;
+      --border-subtle: #1b2230;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-soft: rgba(16, 185, 129, 0.14);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-root);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 4px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 12px; color: var(--text-secondary); }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .icon-btn:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+
+    .status-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-secondary);
+    }
+    .status-pill.warm { background: var(--accent-soft); color: #34d399; }
+    .status-pill.cold { background: rgba(59, 130, 246, 0.16); color: #60a5fa; }
+    .status-pill.busy { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+
+    .region-tag { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .metric-item {
+      background: var(--bg-root);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 7px 9px;
+      display: flex;
+      flex-direction: column;
+    }
+    .metric-label { font-size: 11px; color: var(--text-muted); }
+    .metric-val { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--text-primary); }
+
+    .model-list { display: flex; flex-direction: column; gap: 7px; }
+
+    .model-card {
+      text-align: left;
+      background: var(--bg-root);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 10px;
+      cursor: pointer;
+      color: var(--text-primary);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .model-card:hover { background: var(--bg-surface-hover); }
+    .model-card.selected { border-color: var(--accent); background: rgba(16, 185, 129, 0.08); }
+
+    .model-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 12.5px;
+    }
+    .model-size { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+    .model-card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .ram-tag { color: #34d399; font-weight: 600; }
+    .tmp-tag { color: #60a5fa; }
+
+    .secondary-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .secondary-btn:hover:not(:disabled) { background: var(--bg-surface-hover); border-color: var(--accent); }
+    .secondary-btn:disabled { opacity: 0.6; cursor: wait; }
+    .secondary-btn.sm { padding: 6px 10px; font-size: 12px; }
+    .full-width { width: 100%; }
+
+    .warmup-hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.45; }
+    .warmup-hint code { font-family: var(--font-mono); color: var(--text-secondary); }
+
+    .field-label { font-size: 12px; color: var(--text-secondary); }
+
+    .text-input {
+      width: 100%;
+      background: var(--bg-root);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 8px;
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      resize: vertical;
+    }
+    .text-input:focus { outline: none; border-color: var(--accent); }
+
+    .slider-group { display: flex; flex-direction: column; gap: 4px; }
+    .slider-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    .main-area {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-root);
+    }
+
+    .topbar {
+      height: 58px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(15, 18, 25, 0.85);
+      flex-shrink: 0;
+    }
+    .topbar-left, .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+    .mobile-menu-btn {
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .tab-switcher {
+      display: flex;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-btn.active { background: var(--bg-elevated); color: var(--text-primary); }
+
+    .public-domain-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .public-domain-chip:hover { border-color: var(--accent); color: var(--text-primary); }
+
+    .dot-live {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .ghost-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 6px 11px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .ghost-btn:hover { color: var(--text-primary); background: var(--bg-surface); }
+
+    .progress-banner {
+      background: rgba(16, 185, 129, 0.1);
+      border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 10px 20px;
+      flex-shrink: 0;
+    }
+    .hidden { display: none !important; }
+    .progress-info { display: flex; justify-content: space-between; font-size: 12.5px; color: #6ee7b7; margin-bottom: 6px; }
+    .progress-track { height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); transition: width 0.25s ease; }
+
+    .tab-view { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+    .tab-view.active { display: flex; }
+
+    .messages-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .empty-state {
+      max-width: 720px;
+      margin: auto;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .empty-badge {
+      background: var(--accent-soft);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .empty-state h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+    .empty-state p { color: var(--text-secondary); max-width: 580px; font-size: 14.5px; }
+
+    .starter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .starter-card {
+      text-align: left;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 15px;
+      cursor: pointer;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .starter-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .starter-card strong { font-size: 13.5px; }
+    .starter-card span { font-size: 12px; color: var(--text-secondary); }
+
+    .msg-row {
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .msg-row.user { align-items: flex-end; }
+    .msg-row.assistant { align-items: flex-start; }
+
+    .msg-bubble {
+      max-width: 90%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 14.5px;
+      line-height: 1.65;
+      word-wrap: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: #10b981;
+      color: #042f2e;
+      font-weight: 500;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.assistant .msg-bubble {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-bottom-left-radius: 4px;
+      width: 100%;
+    }
+    .msg-bubble p + p { margin-top: 10px; }
+    .msg-bubble ul, .msg-bubble ol { margin: 8px 0 8px 20px; }
+    .msg-bubble code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    .msg-bubble pre {
+      background: #090b10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .msg-bubble pre code { background: transparent; padding: 0; color: #e2e8f0; }
+    .msg-meta { font-size: 11.5px; font-family: var(--font-mono); color: var(--text-muted); padding: 0 4px; }
+
+    .composer {
+      padding: 14px 20px 18px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-root);
+    }
+    .composer-box {
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .composer-box:focus-within { border-color: var(--accent); }
+    #promptInput {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14.5px;
+      resize: none;
+      max-height: 160px;
+      line-height: 1.5;
+      padding: 4px;
+    }
+    #promptInput:focus { outline: none; }
+    .composer-actions { display: flex; gap: 8px; }
+
+    .send-btn {
+      background: var(--accent);
+      color: #022c22;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 13.5px;
+      cursor: pointer;
+    }
+    .send-btn:hover:not(:disabled) { background: var(--accent-hover); color: #fff; }
+    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .stop-btn {
+      background: rgba(239, 68, 68, 0.16);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 8px 13px;
+      border-radius: 9px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .api-docs-wrap {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .api-hero-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .api-hero-card h2 { font-size: 18px; margin-bottom: 6px; }
+    .api-hero-card p { color: var(--text-secondary); max-width: 520px; font-size: 13.5px; }
+
+    .base-url-box {
+      background: var(--bg-root);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      min-width: 280px;
+    }
+    .base-url-label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+    .base-url-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .base-url-row code { font-family: var(--font-mono); color: #34d399; font-size: 12.5px; }
+
+    .endpoint-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ep-pill {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .method { font-family: var(--font-mono); font-weight: 700; font-size: 10.5px; padding: 2px 6px; border-radius: 4px; }
+    .method.get { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .method.post { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+
+    .code-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .code-card-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .tester-btns { display: flex; gap: 8px; }
+    .copy-small-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+    .copy-small-btn:hover { border-color: var(--accent); }
+    .code-block {
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: #e2e8f0;
+      overflow-x: auto;
+      background: #090b10;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 860px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: 300px;
+        z-index: 40;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-menu-btn { display: inline-block; }
+      .starter-grid { grid-template-columns: 1fr; }
+      .public-domain-chip { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title">Vercel Local LLM</div>
+          <div class="brand-sub">llama.cpp GGUF · Tanpa API Key</div>
+        </div>
+      </div>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Status Runtime Server</span>
+          <button class="icon-btn" id="refreshHealthBtn" title="Segarkan status server">↻</button>
+        </div>
+        <div class="status-badge-row">
+          <span class="status-pill" id="serverStatusPill">Memeriksa...</span>
+          <span class="region-tag" id="regionTag">region: —</span>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-item">
+            <span class="metric-label">RAM (RSS)</span>
+            <span class="metric-val" id="ramMetric">— MB</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Disk /tmp</span>
+            <span class="metric-val" id="diskMetric">— MB</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Kecepatan</span>
+            <span class="metric-val" id="speedMetric">— tok/s</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Request</span>
+            <span class="metric-val" id="reqMetric">0</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Pilih Model GGUF</span>
+        </div>
+        <div class="model-list" id="modelList"></div>
+        <button class="secondary-btn full-width" id="warmupBtn">
+          ⚡ Muat / Warmup Model ke RAM
+        </button>
+        <div class="warmup-hint" id="warmupHint">
+          Cold start pertama mengunduh GGUF ke <code>/tmp</code> (~4–8 dtk). Request berikutnya instan dari RAM.
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <span>Parameter Inferensi</span>
+        </div>
+        <label class="field-label" for="systemPromptInput">System Prompt</label>
+        <textarea id="systemPromptInput" rows="3" class="text-input">Kamu adalah asisten AI lokal yang berjalan langsung di dalam Serverless Function Vercel menggunakan mesin llama.cpp (GGUF CPU) tanpa API pihak ketiga. Jawablah dengan jelas, akurat, ramah, dan terstruktur.</textarea>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Temperature</span>
+            <span id="tempVal">0.65</span>
+          </div>
+          <input type="range" id="tempSlider" min="0" max="1.5" step="0.05" value="0.65" />
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Max Tokens</span>
+            <span id="maxTokensVal">384</span>
+          </div>
+          <input type="range" id="maxTokensSlider" min="64" max="1024" step="32" value="384" />
+        </div>
+      </section>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Buka menu">☰</button>
+          <div class="tab-switcher">
+            <button class="tab-btn active" data-tab="chat">💬 Chat Playground</button>
+            <button class="tab-btn" data-tab="api">🌐 Akses Public API</button>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="public-domain-chip" id="publicDomainChip" title="Klik untuk menyalin URL domain publik">
+            <span class="dot-live"></span>
+            <span id="domainText">Memuat domain...</span>
+          </div>
+          <button class="ghost-btn" id="clearChatBtn" title="Bersihkan percakapan">Bersihkan</button>
+        </div>
+      </header>
+
+      <div class="progress-banner hidden" id="progressBanner">
+        <div class="progress-info">
+          <span id="progressText">Menyiapkan model GGUF di Vercel /tmp...</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <section class="tab-view active" id="tab-chat">
+        <div class="messages-container" id="messagesContainer">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-badge">100% Lokal di CPU Vercel · OpenAI & Ollama API Ready</div>
+            <h1>Jalankan Local LLM Langsung di Vercel</h1>
+            <p>
+              Model GGUF open-source dijalankan langsung di dalam Serverless Function Vercel menggunakan
+              <strong>llama.cpp CPU SIMD</strong> tanpa API key eksternal, dan dapat diakses publik melalui Web UI maupun REST API.
+            </p>
+            <div class="starter-grid">
+              <button class="starter-card" data-prompt="Halo! Jelaskan secara singkat bagaimana kamu bisa berjalan sebagai Local LLM langsung di server Vercel.">
+                <strong>🚀 Cara Kerja di Vercel</strong>
+                <span>Bagaimana GGUF berjalan di Serverless CPU?</span>
+              </button>
+              <button class="starter-card" data-prompt="Buatkan fungsi JavaScript async untuk memanggil endpoint /v1/chat/completions beserta penanganan error-nya.">
+                <strong>💻 Contoh Kode Klien</strong>
+                <span>Buat fungsi JS pemanggil endpoint API LLM</span>
+              </button>
+              <button class="starter-card" data-prompt="Sebutkan 4 keuntungan utama menggunakan model AI open-source lokal dibandingkan layanan berbayar.">
+                <strong>🔒 Keunggulan Local LLM</strong>
+                <span>Privasi, biaya, dan kontrol penuh</span>
+              </button>
+              <button class="starter-card" data-prompt="Buatkan ringkasan perbedaan antara format model GGUF dan ONNX untuk inferensi CPU.">
+                <strong>🧠 GGUF vs ONNX</strong>
+                <span>Perbandingan format kuantisasi model</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <form class="composer" id="chatForm">
+          <div class="composer-box">
+            <textarea
+              id="promptInput"
+              rows="1"
+              placeholder="Ketik pesan ke Local LLM... (Enter untuk kirim, Shift+Enter baris baru)"
+            ></textarea>
+            <div class="composer-actions">
+              <button type="button" class="stop-btn hidden" id="stopBtn">■ Hentikan</button>
+              <button type="submit" class="send-btn" id="sendBtn">Kirim ➤</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="tab-view" id="tab-api">
+        <div class="api-docs-wrap">
+          <div class="api-hero-card">
+            <div>
+              <h2>Endpoint Public Domain (OpenAI & Ollama Compatible)</h2>
+              <p>
+                Domain ini dapat diakses publik tanpa autentikasi SSO Vercel (CORS <code>*</code> aktif).
+                Gunakan langsung dengan SDK OpenAI, Ollama client, <code>curl</code>, atau aplikasi eksternal Anda.
+              </p>
+            </div>
+            <div class="base-url-box">
+              <span class="base-url-label">OpenAI Base URL</span>
+              <div class="base-url-row">
+                <code id="openaiBaseUrl">https://.../v1</code>
+                <button class="copy-small-btn" id="copyBaseUrlBtn">Salin</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="endpoint-badges">
+            <div class="ep-pill"><span class="method get">GET</span> <code>/api/health</code> Status & RAM/Disk</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/v1/models</code> Daftar Model OpenAI</div>
+            <div class="ep-pill"><span class="method post">POST</span> <code>/v1/chat/completions</code> Chat (Stream & JSON)</div>
+            <div class="ep-pill"><span class="method post">POST</span> <code>/api/generate</code> Ollama Compatible</div>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>🧪 Uji Langsung Endpoint Publik</span>
+              <div class="tester-btns">
+                <button class="secondary-btn sm" id="testModelsBtn">GET /v1/models</button>
+                <button class="secondary-btn sm" id="testChatApiBtn">POST /v1/chat/completions</button>
+              </div>
+            </div>
+            <pre class="code-block" id="liveApiOutput">Klik salah satu tombol di atas untuk menguji respons JSON langsung dari server...</pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>1. cURL — OpenAI Chat Completions</span>
+              <button class="copy-small-btn" data-copy-target="curlSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="curlSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>2. Python — Resmi OpenAI SDK</span>
+              <button class="copy-small-btn" data-copy-target="pythonSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="pythonSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>3. JavaScript / Node.js — Fetch API</span>
+              <button class="copy-small-btn" data-copy-target="jsSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="jsSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>4. Ollama Compatible Endpoint (/api/generate)</span>
+              <button class="copy-small-btn" data-copy-target="ollamaSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="ollamaSnippet"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module">
+    const state = {
+      selectedModel: 'qwen2.5-0.5b-instruct',
+      models: [],
+      messages: [],
+      isGenerating: false,
+      abortController: null,
+    };
+
+    const els = {
+      sidebar: document.getElementById('sidebar'),
+      mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+      serverStatusPill: document.getElementById('serverStatusPill'),
+      regionTag: document.getElementById('regionTag'),
+      ramMetric: document.getElementById('ramMetric'),
+      diskMetric: document.getElementById('diskMetric'),
+      speedMetric: document.getElementById('speedMetric'),
+      reqMetric: document.getElementById('reqMetric'),
+      refreshHealthBtn: document.getElementById('refreshHealthBtn'),
+      modelList: document.getElementById('modelList'),
+      warmupBtn: document.getElementById('warmupBtn'),
+      warmupHint: document.getElementById('warmupHint'),
+      systemPromptInput: document.getElementById('systemPromptInput'),
+      tempSlider: document.getElementById('tempSlider'),
+      tempVal: document.getElementById('tempVal'),
+      maxTokensSlider: document.getElementById('maxTokensSlider'),
+      maxTokensVal: document.getElementById('maxTokensVal'),
+      domainText: document.getElementById('domainText'),
+      publicDomainChip: document.getElementById('publicDomainChip'),
+      clearChatBtn: document.getElementById('clearChatBtn'),
+      progressBanner: document.getElementById('progressBanner'),
+      progressText: document.getElementById('progressText'),
+      progressPercent: document.getElementById('progressPercent'),
+      progressFill: document.getElementById('progressFill'),
+      messagesContainer: document.getElementById('messagesContainer'),
+      emptyState: document.getElementById('emptyState'),
+      chatForm: document.getElementById('chatForm'),
+      promptInput: document.getElementById('promptInput'),
+      sendBtn: document.getElementById('sendBtn'),
+      stopBtn: document.getElementById('stopBtn'),
+      openaiBaseUrl: document.getElementById('openaiBaseUrl'),
+      copyBaseUrlBtn: document.getElementById('copyBaseUrlBtn'),
+      curlSnippet: document.getElementById('curlSnippet'),
+      pythonSnippet: document.getElementById('pythonSnippet'),
+      jsSnippet: document.getElementById('jsSnippet'),
+      ollamaSnippet: document.getElementById('ollamaSnippet'),
+      testModelsBtn: document.getElementById('testModelsBtn'),
+      testChatApiBtn: document.getElementById('testChatApiBtn'),
+      liveApiOutput: document.getElementById('liveApiOutput'),
+    };
+
+    function escapeHtml(raw) {
+      return String(raw)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '<span style="color:#64748b">...</span>';
+      let html = escapeHtml(text);
+
+      html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, _lang, code) => {
+        return `<pre><code>${code.trimEnd()}</code></pre>`;
+      });
+
+      html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+      const parts = html.split(/(<pre>[\s\S]*?<\/pre>)/g);
+      return parts
+        .map((part) => {
+          if (part.startsWith('<pre>')) return part;
+          return part
+            .trim()
+            .split(/\n{2,}/)
+            .filter(Boolean)
+            .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+            .join('');
+        })
+        .join('');
+    }
+
+    function populateSnippets() {
+      const origin = window.location.origin || 'https://lokal-llm.vercel.app';
+      els.domainText.textContent = window.location.host || 'preview';
+      els.openaiBaseUrl.textContent = `${origin}/v1`;
+
+      els.curlSnippet.textContent = `curl -s ${origin}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${state.selectedModel}",
+    "messages": [
+      {"role": "user", "content": "Halo! Jelaskan singkat apa itu Local LLM."}
+    ],
+    "temperature": 0.65,
+    "max_tokens": 256
+  }'`;
+
+      els.pythonSnippet.textContent = `from openai import OpenAI
+
+client = OpenAI(
+    base_url="${origin}/v1",
+    api_key="local-no-key-required",
+)
+
+resp = client.chat.completions.create(
+    model="${state.selectedModel}",
+    messages=[
+        {"role": "user", "content": "Buatkan contoh fungsi rekursif Python."}
+    ],
+    stream=True,
+)
+
+for chunk in resp:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)`;
+
+      els.jsSnippet.textContent = `const res = await fetch("${origin}/v1/chat/completions", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "${state.selectedModel}",
+    messages: [{ role: "user", "content": "Halo dari domain publik Vercel!" }],
+    stream: false,
+  }),
+});
+
+const data = await res.json();
+console.log(data.choices[0].message.content);`;
+
+      els.ollamaSnippet.textContent = `curl -s ${origin}/api/generate \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${state.selectedModel}",
+    "prompt": "Sebutkan 3 bahasa pemrograman populer.",
+    "stream": false
+  }'`;
+    }
+
+    function renderModelCards(cachedModels = []) {
+      const cacheMap = new Map(cachedModels.map((m) => [m.id, m]));
+      const list = state.models.length
+        ? state.models
+        : [
+            { id: 'qwen2.5-0.5b-instruct', name: 'Qwen 2.5 0.5B Instruct', size_mb: 379, badge: 'Rekomendasi' },
+            { id: 'smollm2-360m-instruct', name: 'SmolLM2 360M Instruct', size_mb: 258, badge: 'Seimbang' },
+            { id: 'smollm2-135m-instruct', name: 'SmolLM2 135M Instruct', size_mb: 101, badge: 'Ultra Cepat' },
+          ];
+
+      els.modelList.innerHTML = '';
+      for (const m of list) {
+        const c = cacheMap.get(m.id);
+        const isLoaded = c ? c.loaded_in_ram : Boolean(m.loaded_in_ram);
+        const isTmp = c ? c.cached_on_tmp : Boolean(m.cached_on_tmp);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `model-card ${state.selectedModel === m.id ? 'selected' : ''}`;
+        btn.innerHTML = `
+          <div class="model-card-top">
+            <span>${escapeHtml(m.name)}</span>
+            <span class="model-size">${m.size_mb} MB</span>
+          </div>
+          <div class="model-card-meta">
+            <span>${escapeHtml(m.badge || m.quantization || 'GGUF')}</span>
+            ${
+              isLoaded
+                ? '<span class="ram-tag">● Aktif di RAM</span>'
+                : isTmp
+                  ? '<span class="tmp-tag">● Ada di /tmp</span>'
+                  : '<span>Siap unduh</span>'
+            }
+          </div>
+        `;
+        btn.addEventListener('click', () => {
+          state.selectedModel = m.id;
+          renderModelCards(cachedModels);
+          populateSnippets();
+        });
+        els.modelList.appendChild(btn);
+      }
+    }
+
+    async function fetchModelsAndHealth() {
+      try {
+        const [modelsRes, healthRes] = await Promise.all([
+          fetch('/v1/models'),
+          fetch('/api/health'),
+        ]);
+        if (modelsRes.ok) {
+          const mJson = await modelsRes.json();
+          state.models = mJson.data || [];
+        }
+        if (healthRes.ok) {
+          const h = await healthRes.json();
+          updateTelemetryUI(h);
+        } else {
+          renderModelCards();
+        }
+      } catch {
+        els.serverStatusPill.textContent = 'Preview Mode';
+        renderModelCards();
+      }
+    }
+
+    function updateTelemetryUI(h) {
+      const pill = els.serverStatusPill;
+      pill.className = 'status-pill';
+      if (h.status === 'warm') {
+        pill.classList.add('warm');
+        pill.textContent = `Warm · ${h.active_model}`;
+      } else if (h.status === 'downloading' || h.status === 'loading') {
+        pill.classList.add('busy');
+        pill.textContent = h.status === 'downloading' ? 'Mengunduh GGUF...' : 'Memuat RAM...';
+      } else {
+        pill.classList.add('cold');
+        pill.textContent = 'Cold Standby';
+      }
+
+      els.regionTag.textContent = `region: ${h.runtime?.vercel_region || 'local'}`;
+      els.ramMetric.textContent = `${h.runtime?.rss_mb ?? '—'} MB`;
+      if (h.runtime?.tmp_disk) {
+        els.diskMetric.textContent = `${h.runtime.tmp_disk.free_mb} MB sisa`;
+      }
+      els.speedMetric.textContent = h.stats?.lastTokensPerSecond
+        ? `${h.stats.lastTokensPerSecond} tok/s`
+        : '— tok/s';
+      els.reqMetric.textContent = String(h.stats?.requestsServed ?? 0);
+
+      renderModelCards(h.cached_models || []);
+    }
+
+    function showProgress(text, percent = 0) {
+      els.progressBanner.classList.remove('hidden');
+      els.progressText.textContent = text;
+      els.progressPercent.textContent = `${percent}%`;
+      els.progressFill.style.width = `${percent}%`;
+    }
+
+    function hideProgress() {
+      els.progressBanner.classList.add('hidden');
+    }
+
+    function appendMessageElement(role, content, metaText = '') {
+      els.emptyState.classList.add('hidden');
+      const row = document.createElement('div');
+      row.className = `msg-row ${role}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      if (role === 'user') {
+        bubble.textContent = content;
+      } else {
+        bubble.innerHTML = renderMarkdown(content);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'msg-meta';
+      meta.textContent = metaText;
+
+      row.appendChild(bubble);
+      row.appendChild(meta);
+      els.messagesContainer.appendChild(row);
+      els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+
+      return { row, bubble, meta };
+    }
+
+    async function sendChatMessage(userText) {
+      const trimmed = userText.trim();
+      if (!trimmed || state.isGenerating) return;
+
+      state.isGenerating = true;
+      els.sendBtn.disabled = true;
+      els.stopBtn.classList.remove('hidden');
+      els.promptInput.value = '';
+      els.promptInput.style.height = 'auto';
+
+      state.messages.push({ role: 'user', content: trimmed });
+      appendMessageElement('user', trimmed);
+
+      const assistantNodes = appendMessageElement(
+        'assistant',
+        '',
+        `Menjalankan ${state.selectedModel} di server Vercel...`
+      );
+
+      const systemPrompt = els.systemPromptInput.value.trim();
+      const payloadMessages = [];
+      if (systemPrompt) {
+        payloadMessages.push({ role: 'system', content: systemPrompt });
+      }
+      payloadMessages.push(...state.messages);
+
+      const controller = new AbortController();
+      state.abortController = controller;
+
+      let assistantText = '';
+      let finalTimings = null;
+      let finalUsage = null;
+
+      try {
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: state.selectedModel,
+            messages: payloadMessages,
+            temperature: Number(els.tempSlider.value),
+            max_tokens: Number(els.maxTokensSlider.value),
+            stream: true,
+          }),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody?.error?.message || `HTTP ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const rawEvt of events) {
+            const lines = rawEvt.split('\n');
+            for (const line of lines) {
+              if (line.startsWith(': status ')) {
+                try {
+                  const st = JSON.parse(line.slice(9));
+                  if (st.phase === 'downloading') {
+                    showProgress(
+                      `Mengunduh GGUF ${st.model} ke Vercel /tmp (${st.downloaded_mb}/${st.total_mb} MB)...`,
+                      st.percent || 0
+                    );
+                  } else if (st.phase === 'starting') {
+                    assistantNodes.meta.textContent = `Menyiapkan model ${st.model}...`;
+                  }
+                } catch {}
+              } else if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim();
+                if (dataStr === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  if (parsed.error) {
+                    throw new Error(parsed.error.message);
+                  }
+                  const delta = parsed.choices?.[0]?.delta?.content;
+                  if (delta) {
+                    hideProgress();
+                    assistantText += delta;
+                    assistantNodes.bubble.innerHTML = renderMarkdown(assistantText);
+                    els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
+                  }
+                  if (parsed.timings) finalTimings = parsed.timings;
+                  if (parsed.usage) finalUsage = parsed.usage;
+                } catch (parseErr) {
+                  if (parseErr.message && !parseErr.message.includes('JSON')) {
+                    throw parseErr;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        state.messages.push({ role: 'assistant', content: assistantText });
+        const speedInfo = finalTimings?.tokens_per_second
+          ? `${finalTimings.tokens_per_second} tok/dtk`
+          : '';
+        const tokInfo = finalUsage?.completion_tokens
+          ? `${finalUsage.completion_tokens} token`
+          : '';
+        const coldInfo = finalTimings?.cold_load
+          ? `cold-load ${(finalTimings.load_ms / 1000).toFixed(1)}s`
+          : 'warm RAM';
+
+        assistantNodes.meta.textContent = [state.selectedModel, speedInfo, tokInfo, coldInfo]
+          .filter(Boolean)
+          .join(' · ');
+
+        fetchModelsAndHealth();
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          if (assistantText) {
+            state.messages.push({ role: 'assistant', content: assistantText });
+          }
+          assistantNodes.meta.textContent = `${state.selectedModel} · Dihentikan oleh pengguna`;
+        } else {
+          assistantNodes.bubble.innerHTML = `<p style="color:#f87171"><strong>Error:</strong> ${escapeHtml(
+            err.message
+          )}</p>`;
+          assistantNodes.meta.textContent = 'Gagal memproses permintaan';
+        }
+      } finally {
+        hideProgress();
+        state.isGenerating = false;
+        state.abortController = null;
+        els.sendBtn.disabled = false;
+        els.stopBtn.classList.add('hidden');
+      }
+    }
+
+    els.tempSlider.addEventListener('input', () => {
+      els.tempVal.textContent = els.tempSlider.value;
+    });
+
+    els.maxTokensSlider.addEventListener('input', () => {
+      els.maxTokensVal.textContent = els.maxTokensSlider.value;
+    });
+
+    els.chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      sendChatMessage(els.promptInput.value);
+    });
+
+    els.promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage(els.promptInput.value);
+      }
+    });
+
+    els.promptInput.addEventListener('input', () => {
+      els.promptInput.style.height = 'auto';
+      els.promptInput.style.height = `${Math.min(els.promptInput.scrollHeight, 150)}px`;
+    });
+
+    els.stopBtn.addEventListener('click', () => {
+      if (state.abortController) {
+        state.abortController.abort();
+      }
+    });
+
+    els.clearChatBtn.addEventListener('click', () => {
+      state.messages = [];
+      els.messagesContainer.querySelectorAll('.msg-row').forEach((n) => n.remove());
+      els.emptyState.classList.remove('hidden');
+    });
+
+    els.warmupBtn.addEventListener('click', async () => {
+      els.warmupBtn.disabled = true;
+      els.warmupBtn.textContent = `⏳ Memuat ${state.selectedModel}...`;
+      showProgress(`Mengunduh & memuat ${state.selectedModel} ke RAM server...`, 35);
+      try {
+        const res = await fetch('/api/warmup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: state.selectedModel }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+        updateTelemetryUI(data.health);
+        els.warmupHint.textContent = `✅ ${data.name} aktif di RAM (${
+          data.cold_load ? `dimuat dalam ${(data.load_ms / 1000).toFixed(1)} dtk` : 'sudah warm'
+        }).`;
+      } catch (err) {
+        els.warmupHint.textContent = `⚠️ Gagal warmup: ${err.message}`;
+      } finally {
+        hideProgress();
+        els.warmupBtn.disabled = false;
+        els.warmupBtn.textContent = '⚡ Muat / Warmup Model ke RAM';
+      }
+    });
+
+    els.refreshHealthBtn.addEventListener('click', fetchModelsAndHealth);
+
+    document.querySelectorAll('.starter-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        const prompt = card.getAttribute('data-prompt');
+        if (prompt) sendChatMessage(prompt);
+      });
+    });
+
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+      });
+    });
+
+    els.mobileMenuBtn.addEventListener('click', () => {
+      els.sidebar.classList.toggle('open');
+    });
+
+    els.publicDomainChip.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(window.location.origin);
+      const prev = els.domainText.textContent;
+      els.domainText.textContent = 'Tersalin!';
+      setTimeout(() => {
+        els.domainText.textContent = prev;
+      }, 1200);
+    });
+
+    els.copyBaseUrlBtn.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(`${window.location.origin}/v1`);
+      els.copyBaseUrlBtn.textContent = 'Tersalin!';
+      setTimeout(() => {
+        els.copyBaseUrlBtn.textContent = 'Salin';
+      }, 1200);
+    });
+
+    document.querySelectorAll('[data-copy-target]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const targetId = btn.getAttribute('data-copy-target');
+        const code = document.getElementById(targetId)?.textContent || '';
+        await navigator.clipboard.writeText(code);
+        const orig = btn.textContent;
+        btn.textContent = 'Tersalin!';
+        setTimeout(() => {
+          btn.textContent = orig;
+        }, 1200);
+      });
+    });
+
+    els.testModelsBtn.addEventListener('click', async () => {
+      els.liveApiOutput.textContent = 'Memanggil GET /v1/models ...';
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/v1/models');
+        const json = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
+      } catch (err) {
+        els.liveApiOutput.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    els.testChatApiBtn.addEventListener('click', async () => {
+      els.liveApiOutput.textContent = `Memanggil POST /v1/chat/completions (${state.selectedModel}) ...`;
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: state.selectedModel,
+            messages: [{ role: 'user', content: 'Sapa pengguna dalam satu kalimat singkat Bahasa Indonesia!' }],
+            max_tokens: 64,
+            stream: false,
+          }),
+        });
+        const json = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
+        fetchModelsAndHealth();
+      } catch (err) {
+        els.liveApiOutput.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    populateSnippets();
+    renderModelCards();
+    fetchModelsAndHealth();
+  </script>
+</body>
+</html>

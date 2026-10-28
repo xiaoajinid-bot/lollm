@@ -1,0 +1,19 @@
+{
+  "name": "vercel-local-llm",
+  "version": "1.0.1",
+  "description": "Server-side Local LLM (llama.cpp GGUF CPU inference) on Vercel Serverless with OpenAI & Ollama compatible public API + Web Chat UI",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node scripts/dev-server.mjs",
+    "dev": "node scripts/dev-server.mjs",
+    "build": "node -e \"console.log('Static public/index.html + Serverless api/llm.mjs ready')\""
+  },
+  "dependencies": {
+    "@node-llama-cpp/linux-x64": "3.22.2",
+    "node-llama-cpp": "3.22.2"
+  }
+}
