@@ -573,13 +573,13 @@
       .sidebar {
         position: fixed;
         inset: 0 auto 0 0;
-        width: 300px;
+        width: min(86vw, 320px);
         z-index: 40;
         transform: translateX(-100%);
         transition: transform 0.2s ease;
       }
-      .sidebar.open { transform: translateX(0); }
-      .mobile-menu-btn { display: inline-block; }
+      .sidebar.open { transform: translateX(0); box-shadow: 20px 0 40px rgba(0,0,0,.35); }
+      .mobile-menu-btn { display: inline-grid; place-items: center; }
       .starter-grid { grid-template-columns: 1fr; }
       .public-domain-chip { display: none; }
     }
@@ -703,6 +703,50 @@
       .topbar-right .ghost-btn::before { content: '⋯'; font-size: 18px; line-height: 1; }
       .tab-btn { padding-inline: 7px; }
       .empty-badge { font-size: 11px; padding: 5px 11px; }
+    }
+    /* Mobile-first product shell */
+    @media (max-width: 860px) {
+      html, body { overflow: hidden; }
+      .app-shell { display: block; height: 100dvh; }
+      .main-area { height: 100dvh; min-width: 0; }
+      .topbar { height: 64px; padding: 0 14px; background: #1c1b20; border-bottom: 1px solid #35323a; }
+      .topbar-left { min-width: 0; gap: 10px; }
+      .mobile-menu-btn { width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: #302d36; }
+      .tab-switcher { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; gap: 4px; }
+      .tab-btn { padding: 9px 12px; font-size: 14px; }
+      .tab-btn.active { background: #d0bcff; color: #332b48; }
+      #clearChatBtn { display: none; }
+      .progress-banner { padding: 9px 14px; }
+      .messages-container { padding: 18px 14px 12px; gap: 14px; }
+      .empty-state { width: 100%; gap: 12px; padding: 12px 0; }
+      .empty-badge { padding: 5px 10px; font-size: 11px; }
+      .empty-state h1 { font-size: clamp(24px, 7vw, 31px); line-height: 1.14; }
+      .empty-state p { font-size: 13px; line-height: 1.45; max-width: 320px; }
+      .starter-grid { gap: 8px; margin-top: 4px; }
+      .starter-card { border: 0; padding: 14px; border-radius: 20px; background: #2b2930; }
+      .starter-card strong { font-size: 13px; }
+      .starter-card span { font-size: 11px; }
+      .composer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); background: #141218; }
+      .composer-box { padding: 8px 8px 8px 14px; gap: 6px; border: 0; border-radius: 26px; background: #2b2930; }
+      #promptInput { font-size: 15px; min-width: 0; }
+      .send-btn { width: 42px; height: 42px; padding: 0; border-radius: 50%; font-size: 0; background: #d0bcff; color: #332b48; }
+      .send-btn::after { content: '↑'; font-size: 20px; font-weight: 700; }
+      .stop-btn { padding: 8px 10px; border-radius: 20px; font-size: 11px; }
+      .msg-bubble { max-width: 94%; padding: 11px 13px; font-size: 14px; line-height: 1.5; border-radius: 18px; }
+      .msg-meta { font-size: 10px; }
+      .api-docs-wrap { padding: 16px 14px 30px; gap: 12px; }
+      .api-hero-card { padding: 16px; border: 0; border-radius: 22px; display: block; }
+      .api-hero-card h2 { font-size: 18px; }
+      .api-hero-card p { font-size: 12px; }
+      .base-url-box { min-width: 0; margin-top: 14px; border: 0; border-radius: 16px; }
+      .endpoint-badges { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+      .ep-pill { min-width: 0; padding: 8px; border: 0; border-radius: 14px; font-size: 10px; overflow: hidden; }
+      .ep-pill code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .code-card { border: 0; border-radius: 20px; }
+      .code-card-header { padding: 12px 14px; gap: 8px; }
+      .tester-btns { flex-wrap: wrap; justify-content: flex-end; }
+      .tester-btns .secondary-btn { padding: 7px 9px; font-size: 10px; }
+      .code-block { padding: 12px; font-size: 10.5px; }
     }
   </style>
 </head>
@@ -835,11 +879,8 @@
         <div class="messages-container" id="messagesContainer">
           <div class="empty-state" id="emptyState">
             <div class="empty-badge">Local LLM</div>
-            <h1>Jalankan Local LLM Langsung di Vercel</h1>
-            <p>
-              Model GGUF open-source dijalankan langsung di dalam Serverless Function Vercel menggunakan
-              <strong>llama.cpp CPU SIMD</strong> tanpa API key eksternal, dan dapat diakses publik melalui Web UI maupun REST API.
-            </p>
+            <h1>Local AI, langsung di Vercel</h1>
+            <p>Chat dengan model open-source tanpa API key eksternal.</p>
             <div class="starter-grid">
               <button class="starter-card" data-prompt="Halo! Jelaskan secara singkat bagaimana kamu bisa berjalan sebagai Local LLM langsung di server Vercel.">
 <strong>Cara kerja</strong>
