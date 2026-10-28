@@ -11,7 +11,8 @@
     "start": "node scripts/dev-server.mjs",
     "dev": "node scripts/dev-server.mjs",
     "build": "node -e \"console.log('Static public/index.html + Serverless api/llm.mjs ready')\"",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:ui": "node tests/ui/functional.mjs"
   },
   "dependencies": {
     "@node-llama-cpp/linux-x64": "3.22.2",
