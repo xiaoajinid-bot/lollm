@@ -972,6 +972,152 @@
       }
     }
 
+    /* ---------- Tool calling / connector UI ---------- */
+    .tool-panel-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 32px;
+    }
+    .switch {
+      position: relative;
+      flex: 0 0 auto;
+      width: 46px;
+      height: 28px;
+      border-radius: 999px;
+    }
+    .switch input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      opacity: 0;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .switch-track {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      background: #49454f;
+      transition: background 0.18s ease;
+    }
+    .switch-track::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #e7e0ec;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .switch input:checked + .switch-track { background: var(--accent); }
+    .switch input:checked + .switch-track::after {
+      transform: translateX(18px);
+      background: #332b48;
+    }
+    .switch input:focus-visible + .switch-track {
+      outline: 3px solid rgba(208, 188, 255, 0.55);
+      outline-offset: 2px;
+    }
+
+    .tool-list { display: flex; flex-direction: column; gap: 6px; }
+    .tool-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 40px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: #211f26;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .tool-row input[type='checkbox'] {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      accent-color: var(--accent);
+    }
+    .tool-row .tool-name {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tool-row .tool-tag {
+      margin-left: auto;
+      flex: 0 0 auto;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 9.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tool-row.unavailable { opacity: 0.55; cursor: not-allowed; }
+    .tool-row.unavailable .tool-tag { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+
+    .tool-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .tool-meta input[type='number'] {
+      width: 68px;
+      padding: 7px 9px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #211f26;
+      color: var(--text-primary);
+      font-size: 12.5px;
+    }
+
+    .msg-trace {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 94%;
+    }
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #2b2930;
+      color: var(--text-secondary);
+      font: 500 11px var(--font-mono);
+    }
+    .tool-chip .chip-args {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: 0.85;
+    }
+    .tool-chip.pending { opacity: 0.8; }
+    .tool-chip.ok { border-color: rgba(16, 185, 129, 0.45); color: #a7f3d0; }
+    .tool-chip.err { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
+
+    @media (max-width: 860px) {
+      .tool-row { min-height: 44px; }
+      .tool-chip .chip-args { max-width: 120px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -1054,6 +1200,28 @@
         </button>
         <div class="warmup-hint" id="warmupHint">
           Cold start pertama mengunduh GGUF ke <code>/tmp</code> (~4–8 dtk). Request berikutnya instan dari RAM.
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Tool dan connector">
+        <div class="panel-header">
+          <span>Tool &amp; Connector</span>
+          <span class="live-indicator" id="toolCount">memuat...</span>
+        </div>
+        <div class="tool-panel-toggle">
+          <label class="field-label" for="toolsEnabled">Aktifkan tool calling</label>
+          <span class="switch">
+            <input type="checkbox" id="toolsEnabled" checked />
+            <span class="switch-track"></span>
+          </span>
+        </div>
+        <div class="tool-list" id="toolList"></div>
+        <div class="tool-meta">
+          <label for="toolRounds">Maks. putaran</label>
+          <input type="number" id="toolRounds" min="1" max="4" step="1" value="2" inputmode="numeric" />
+        </div>
+        <div class="warmup-hint" id="toolsHint">
+          Model boleh memanggil tool sebelum menjawab. Jejak panggilan muncul sebagai chip di pesan.
         </div>
       </section>
 
@@ -1185,6 +1353,8 @@
             <div class="ep-pill"><span class="method get">GET</span> <code>/v1/models</code> Daftar Model OpenAI</div>
             <div class="ep-pill"><span class="method post">POST</span> <code>/v1/chat/completions</code> Chat (Stream & JSON)</div>
             <div class="ep-pill"><span class="method post">POST</span> <code>/api/generate</code> Ollama Compatible</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/api/tools</code> Katalog Tool &amp; Connector</div>
+            <div class="ep-pill"><span class="method post">POST</span> <code>/api/tools</code> Panggil Tool Langsung</div>
           </div>
 
           <div class="code-card">
@@ -1193,6 +1363,7 @@
               <div class="tester-btns">
                 <button class="secondary-btn sm" id="testModelsBtn">GET /v1/models</button>
                 <button class="secondary-btn sm" id="testChatApiBtn">POST /v1/chat/completions</button>
+                <button class="secondary-btn sm" id="testToolsBtn">GET /api/tools</button>
               </div>
             </div>
             <pre class="code-block" id="liveApiOutput">Klik salah satu tombol di atas untuk menguji respons JSON langsung dari server...</pre>
@@ -1224,7 +1395,23 @@
 
           <div class="code-card">
             <div class="code-card-header">
-              <span>4. Ollama Compatible Endpoint (/api/generate)</span>
+              <span>4. Function / Tool Calling (OpenAI compatible)</span>
+              <button class="copy-small-btn" data-copy-target="toolSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="toolSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>5. Connector Kustom via LLM_CONNECTORS</span>
+              <button class="copy-small-btn" data-copy-target="connectorSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="connectorSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>6. Ollama Compatible Endpoint (/api/generate)</span>
               <button class="copy-small-btn" data-copy-target="ollamaSnippet">Salin Kode</button>
             </div>
             <pre class="code-block" id="ollamaSnippet"></pre>
@@ -1292,6 +1479,14 @@
       cpuInfo: document.getElementById('cpuInfo'),
       healthUpdated: document.getElementById('healthUpdated'),
       telemetryAge: document.getElementById('telemetryAge'),
+      toolsEnabled: document.getElementById('toolsEnabled'),
+      toolList: document.getElementById('toolList'),
+      toolCount: document.getElementById('toolCount'),
+      toolRounds: document.getElementById('toolRounds'),
+      toolsHint: document.getElementById('toolsHint'),
+      testToolsBtn: document.getElementById('testToolsBtn'),
+      toolSnippet: document.getElementById('toolSnippet'),
+      connectorSnippet: document.getElementById('connectorSnippet'),
     };
 
     let telemetryTimer = null;
@@ -1301,6 +1496,201 @@
     const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
     const isMobileNav = () => mobileNavQuery.matches;
     const isSidebarOpen = () => els.sidebar.classList.contains('open');
+
+    /* ---------------------------------------------------------------
+       Tool calling & connector: state, preferensi, dan render panel
+       --------------------------------------------------------------- */
+    const TOOL_STORAGE_KEY = 'lollm.tools.v1';
+    const toolState = {
+      enabled: true,
+      maxRounds: 2,
+      items: [],
+      selected: new Set(),
+      loaded: false,
+    };
+
+    function loadToolPrefs() {
+      try {
+        const raw = localStorage.getItem(TOOL_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.enabled === 'boolean') toolState.enabled = parsed.enabled;
+        if (Array.isArray(parsed.selected)) toolState.selected = new Set(parsed.selected);
+        if (Number(parsed.maxRounds) > 0) toolState.maxRounds = Number(parsed.maxRounds);
+      } catch {
+        /* localStorage bisa diblokir di mode privat */
+      }
+    }
+
+    function saveToolPrefs() {
+      try {
+        localStorage.setItem(
+          TOOL_STORAGE_KEY,
+          JSON.stringify({
+            enabled: toolState.enabled,
+            maxRounds: toolState.maxRounds,
+            selected: [...toolState.selected],
+          })
+        );
+      } catch {
+        /* abaikan */
+      }
+    }
+
+    function toolName(tool) {
+      return tool?.function?.name || tool?.name || '';
+    }
+
+    function renderToolList() {
+      if (!els.toolList) return;
+      els.toolList.innerHTML = '';
+
+      if (!toolState.items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'warmup-hint';
+        empty.textContent = toolState.loaded ? 'Tidak ada tool aktif di server.' : 'Memuat katalog tool...';
+        els.toolList.appendChild(empty);
+        return;
+      }
+
+      for (const tool of toolState.items) {
+        const name = toolName(tool);
+        const row = document.createElement('label');
+        row.className = `tool-row${tool.available ? '' : ' unavailable'}`;
+        row.title = tool.function?.description || name;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = toolState.selected.has(name);
+        checkbox.disabled = !tool.available;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) toolState.selected.add(name);
+          else toolState.selected.delete(name);
+          saveToolPrefs();
+          syncToolControls();
+        });
+
+        const label = document.createElement('span');
+        label.className = 'tool-name';
+        label.textContent = name;
+
+        const tag = document.createElement('span');
+        tag.className = 'tool-tag';
+        tag.textContent = tool.available ? tool.source || 'builtin' : 'butuh allowlist';
+
+        row.append(checkbox, label, tag);
+        els.toolList.appendChild(row);
+      }
+    }
+
+    function syncToolControls() {
+      if (!els.toolsEnabled) return;
+      els.toolsEnabled.checked = toolState.enabled;
+      els.toolList.dataset.disabled = toolState.enabled ? 'false' : 'true';
+      els.toolList.style.opacity = toolState.enabled ? '1' : '0.5';
+      els.toolList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.disabled = !toolState.enabled || input.closest('.tool-row')?.classList.contains('unavailable');
+      });
+      els.toolRounds.value = String(toolState.maxRounds);
+      els.toolRounds.disabled = !toolState.enabled;
+      els.toolCount.textContent = toolState.loaded
+        ? `${toolState.selected.size}/${toolState.items.length} aktif`
+        : 'offline';
+    }
+
+    async function loadTools() {
+      loadToolPrefs();
+      try {
+        const res = await fetch('/api/tools', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        toolState.items = Array.isArray(json.data) ? json.data : [];
+        toolState.loaded = true;
+
+        const known = new Set(toolState.items.map((tool) => toolName(tool)));
+        for (const name of [...toolState.selected]) {
+          if (!known.has(name)) toolState.selected.delete(name);
+        }
+        if (toolState.selected.size === 0) {
+          for (const tool of toolState.items) {
+            const name = toolName(tool);
+            if (tool.available && name !== 'http_fetch') toolState.selected.add(name);
+          }
+        }
+        if (json.config?.max_rounds && !localStorage.getItem(TOOL_STORAGE_KEY)) {
+          toolState.maxRounds = Math.min(4, Number(json.config.max_rounds));
+        }
+        renderToolList();
+        syncToolControls();
+      } catch (err) {
+        toolState.loaded = false;
+        renderToolList();
+        syncToolControls();
+        if (els.toolsHint) {
+          els.toolsHint.textContent = `⚠️ Katalog tool tidak tersedia (${err.message}). Tool calling dinonaktifkan.`;
+        }
+      }
+    }
+
+    function getSelectedToolSchemas() {
+      if (!toolState.enabled) return [];
+      const byName = new Map(toolState.items.map((tool) => [toolName(tool), tool]));
+      return [...toolState.selected]
+        .map((name) => byName.get(name))
+        .filter((tool) => tool && tool.available)
+        .map((tool) => ({
+          type: 'function',
+          function: {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: tool.function.parameters,
+          },
+        }));
+    }
+
+    function formatToolArgs(args) {
+      try {
+        const text = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+        return text === '{}' ? '' : text.length > 58 ? `${text.slice(0, 55)}…` : text;
+      } catch {
+        return '';
+      }
+    }
+
+    function createToolChip(container, info, state = 'pending') {
+      const chip = document.createElement('span');
+      chip.className = `tool-chip ${state}`;
+      chip.dataset.toolId = info.id || '';
+
+      const label = document.createElement('span');
+      label.textContent = `🔧 ${info.name}`;
+
+      const args = document.createElement('span');
+      args.className = 'chip-args';
+      args.textContent = formatToolArgs(info.arguments);
+
+      const status = document.createElement('span');
+      status.className = 'chip-status';
+      status.textContent = state === 'pending' ? '…' : '';
+
+      chip.append(label);
+      if (args.textContent) chip.append(args);
+      chip.append(status);
+      container.appendChild(chip);
+      container.classList.remove('hidden');
+      return chip;
+    }
+
+    function settleToolChip(chip, info) {
+      if (!chip) return;
+      chip.classList.remove('pending');
+      chip.classList.add(info.ok ? 'ok' : 'err');
+      const status = chip.querySelector('.chip-status');
+      if (status) {
+        status.textContent = info.ok ? `✅ ${Math.round(info.duration_ms || 0)}ms` : '⚠️ gagal';
+      }
+      if (info.preview) chip.title = String(info.preview).slice(0, 500);
+    }
 
     function escapeHtml(raw) {
       return String(raw)
@@ -1416,6 +1806,85 @@ for chunk in resp:
 
 const data = await res.json();
 console.log(data.choices[0].message.content);`;
+
+      const toolNames = (toolState.items.length
+        ? toolState.items.filter((tool) => tool.available).map((tool) => tool.function.name)
+        : ['calculate', 'get_current_time', 'wikipedia_summary']
+      ).slice(0, 4);
+
+      els.toolSnippet.textContent = `# 1) Lihat tool & connector yang tersedia di server
+curl -s ${origin}/api/tools
+
+# 2) Chat dengan tool calling (server mengeksekusi tool otomatis)
+curl -s ${origin}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${state.selectedModel}",
+    "messages": [{"role":"user","content":"Berapa (19*23)+7? Sekalian jam sekarang."}],
+    "tools": [{
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "description": "Menghitung ekspresi matematika",
+        "parameters": {
+          "type": "object",
+          "properties": {"expression": {"type": "string"}},
+          "required": ["expression"]
+        }
+      }
+    }],
+    "tool_choice": "auto",
+    "max_tool_rounds": 2
+  }'
+
+# Tool yang bisa dipanggil: ${toolNames.join(', ') || '-'}
+# Respons berisi choices[0].message.content + tool_trace (tool yang dieksekusi server).`;
+
+      els.connectorSnippet.textContent = `# Tambahkan di Vercel → Project → Settings → Environment Variables
+LLM_CONNECTORS='[
+  {
+    "name": "cuaca_kota",
+    "description": "Info cuaca terkini untuk sebuah kota",
+    "parameters": {
+      "type": "object",
+      "properties": { "kota": { "type": "string" } },
+      "required": ["kota"]
+    },
+    "request": {
+      "url": "https://api.contoh.com/cuaca?q={{kota}}&unit=c",
+      "method": "GET",
+      "headers": { "Authorization": "Bearer {{env:CUACA_API_KEY}}" }
+    },
+    "response_path": "current",
+    "max_chars": 1200
+  },
+  {
+    "name": "buat_tiket",
+    "description": "Membuat tiket dukungan baru",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "judul": { "type": "string" },
+        "prioritas": { "type": "string", "enum": ["low", "high"] }
+      },
+      "required": ["judul"]
+    },
+    "request": {
+      "url": "https://api.contoh.com/tiket",
+      "method": "POST",
+      "body": { "title": "{{judul}}", "priority": "{{prioritas}}" }
+    },
+    "response_path": "data.id"
+  }
+]'
+
+# Host tujuan wajib ada di allowlist (proteksi SSRF)
+LLM_TOOL_HTTP_ALLOW_HOSTS="api.contoh.com"
+
+# Opsional
+LLM_TOOL_MAX_ROUNDS="3"        # batas putaran tool per request
+LLM_TOOLS_DISABLED="http_fetch" # matikan tool tertentu
+LLM_TOOLS_DIRECT_INVOKE="disabled" # matikan POST /api/tools`;
 
       els.ollamaSnippet.textContent = `curl -s ${origin}/api/generate \\
   -H "Content-Type: application/json" \\
@@ -1582,12 +2051,16 @@ console.log(data.choices[0].message.content);`;
       meta.className = 'msg-meta';
       meta.textContent = metaText;
 
+      const trace = document.createElement('div');
+      trace.className = 'msg-trace hidden';
+
+      if (role === 'assistant') row.appendChild(trace);
       row.appendChild(bubble);
       row.appendChild(meta);
       els.messagesContainer.appendChild(row);
       els.messagesContainer.scrollTop = els.messagesContainer.scrollHeight;
 
-      return { row, bubble, meta };
+      return { row, bubble, meta, trace };
     }
 
     async function sendChatMessage(userText) {
@@ -1619,6 +2092,10 @@ console.log(data.choices[0].message.content);`;
       const controller = new AbortController();
       state.abortController = controller;
 
+      const selectedTools = getSelectedToolSchemas();
+      const toolChips = new Map();
+      let toolCallCount = 0;
+
       let assistantText = '';
       let finalTimings = null;
       let finalUsage = null;
@@ -1634,6 +2111,13 @@ console.log(data.choices[0].message.content);`;
             temperature: Number(els.tempSlider.value),
             max_tokens: Number(els.maxTokensSlider.value),
             stream: true,
+            ...(selectedTools.length
+              ? {
+                  tools: selectedTools,
+                  tool_choice: 'auto',
+                  max_tool_rounds: toolState.maxRounds,
+                }
+              : {}),
           }),
         });
 
@@ -1667,6 +2151,17 @@ console.log(data.choices[0].message.content);`;
                     );
                   } else if (st.phase === 'starting') {
                     assistantNodes.meta.textContent = `Menyiapkan model ${st.model}...`;
+                  } else if (st.phase === 'tool_call') {
+                    toolCallCount += 1;
+                    const chip = createToolChip(assistantNodes.trace, st, 'pending');
+                    if (st.id) toolChips.set(st.id, chip);
+                    else toolChips.set(`anon-${toolCallCount}`, chip);
+                    assistantNodes.meta.textContent = `Memanggil tool ${st.name}...`;
+                  } else if (st.phase === 'tool_result') {
+                    const chip = toolChips.get(st.id) || createToolChip(assistantNodes.trace, st, 'pending');
+                    settleToolChip(chip, st);
+                  } else if (st.phase === 'round') {
+                    assistantNodes.meta.textContent = `Putaran tool ${st.round}...`;
                   }
                 } catch {}
               } else if (line.startsWith('data: ')) {
@@ -1707,7 +2202,8 @@ console.log(data.choices[0].message.content);`;
           ? `cold-load ${(finalTimings.load_ms / 1000).toFixed(1)}s`
           : 'warm RAM';
 
-        assistantNodes.meta.textContent = [state.selectedModel, speedInfo, tokInfo, coldInfo]
+        const toolInfo = toolCallCount > 0 ? `${toolCallCount} tool` : '';
+        assistantNodes.meta.textContent = [state.selectedModel, toolInfo, speedInfo, tokInfo, coldInfo]
           .filter(Boolean)
           .join(' · ');
 
@@ -1790,6 +2286,37 @@ console.log(data.choices[0].message.content);`;
       state.messages = [];
       els.messagesContainer.querySelectorAll('.msg-row').forEach((n) => n.remove());
       els.emptyState.classList.remove('hidden');
+    });
+
+    els.toolsEnabled.addEventListener('change', () => {
+      toolState.enabled = els.toolsEnabled.checked;
+      saveToolPrefs();
+      syncToolControls();
+      if (els.toolsHint) {
+        els.toolsHint.textContent = toolState.enabled
+          ? 'Model boleh memanggil tool sebelum menjawab. Jejak panggilan muncul sebagai chip di pesan.'
+          : 'Tool calling dimatikan: model hanya menjawab dari pengetahuannya sendiri.';
+      }
+    });
+
+    els.toolRounds.addEventListener('change', () => {
+      const value = Math.max(1, Math.min(4, Math.round(Number(els.toolRounds.value) || 2)));
+      toolState.maxRounds = value;
+      els.toolRounds.value = String(value);
+      saveToolPrefs();
+    });
+
+    els.testToolsBtn.addEventListener('click', async () => {
+      els.liveApiOutput.textContent = 'Memanggil GET /api/tools ...';
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/api/tools', { cache: 'no-store' });
+        const json = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
+      } catch (err) {
+        els.liveApiOutput.textContent = `Error: ${err.message}`;
+      }
     });
 
     els.warmupBtn.addEventListener('click', async () => {
@@ -2079,6 +2606,7 @@ console.log(data.choices[0].message.content);`;
 
     populateSnippets();
     renderModelCards();
+    loadTools().finally(populateSnippets);
     fetchModelsAndHealth().finally(startRealtimeTelemetry);
   </script>
 </body>
