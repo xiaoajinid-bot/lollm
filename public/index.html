@@ -1201,6 +1201,7 @@
         <div class="warmup-hint" id="warmupHint">
           Cold start pertama mengunduh GGUF ke <code>/tmp</code> (~4–8 dtk). Request berikutnya instan dari RAM.
         </div>
+        <div class="warmup-hint" id="modelSourceHint">Sumber model: memeriksa...</div>
       </section>
 
       <section class="panel" aria-label="Tool dan connector">
@@ -1359,6 +1360,8 @@
             <div class="ep-pill"><span class="method get">GET</span> <code>/.well-known/utcp</code> Manual UTCP Server</div>
             <div class="ep-pill"><span class="method get">GET</span> <code>/api/utcp</code> Status Manual UTCP</div>
             <div class="ep-pill"><span class="method post">POST</span> <code>/api/utcp/discover</code> Discovery Manual</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/api/storage</code> Status Sumber Model</div>
+            <div class="ep-pill"><span class="method get">GET</span> <code>/api/storage/check</code> Verifikasi Objek Model</div>
           </div>
 
           <div class="code-card">
@@ -1369,6 +1372,7 @@
                 <button class="secondary-btn sm" id="testChatApiBtn">POST /v1/chat/completions</button>
                 <button class="secondary-btn sm" id="testToolsBtn">GET /api/tools</button>
                 <button class="secondary-btn sm" id="testUtcpBtn">GET /api/utcp</button>
+                <button class="secondary-btn sm" id="testStorageBtn">GET /api/storage</button>
               </div>
             </div>
             <pre class="code-block" id="liveApiOutput">Klik salah satu tombol di atas untuk menguji respons JSON langsung dari server...</pre>
@@ -1424,7 +1428,15 @@
 
           <div class="code-card">
             <div class="code-card-header">
-              <span>7. Ollama Compatible Endpoint (/api/generate)</span>
+              <span>7. Penyimpanan Model (S3 / Vercel Blob)</span>
+              <button class="copy-small-btn" data-copy-target="storageSnippet">Salin Kode</button>
+            </div>
+            <pre class="code-block" id="storageSnippet"></pre>
+          </div>
+
+          <div class="code-card">
+            <div class="code-card-header">
+              <span>8. Ollama Compatible Endpoint (/api/generate)</span>
               <button class="copy-small-btn" data-copy-target="ollamaSnippet">Salin Kode</button>
             </div>
             <pre class="code-block" id="ollamaSnippet"></pre>
@@ -1499,6 +1511,9 @@
       toolsHint: document.getElementById('toolsHint'),
       testToolsBtn: document.getElementById('testToolsBtn'),
       testUtcpBtn: document.getElementById('testUtcpBtn'),
+      testStorageBtn: document.getElementById('testStorageBtn'),
+      modelSourceHint: document.getElementById('modelSourceHint'),
+      storageSnippet: document.getElementById('storageSnippet'),
       utcpSnippet: document.getElementById('utcpSnippet'),
       toolSnippet: document.getElementById('toolSnippet'),
       connectorSnippet: document.getElementById('connectorSnippet'),
@@ -1924,6 +1939,32 @@ LLM_TOOL_MAX_ROUNDS="3"        # batas putaran tool per request
 LLM_TOOLS_DISABLED="http_fetch" # matikan tool tertentu
 LLM_TOOLS_DIRECT_INVOKE="disabled" # matikan POST /api/tools`;
 
+      els.storageSnippet.textContent = `# GGUF diambil dari sumber pertama yang aktif, lalu fallback ke Hugging Face.
+# Urutan mode auto: s3 -> blob -> url -> huggingface (atur lewat LLM_MODEL_SOURCE)
+
+# A) S3-compatible: AWS S3, Cloudflare R2, Backblaze B2, MinIO, Supabase
+LLM_S3_BUCKET="lollm-models"
+LLM_S3_REGION="auto"              # R2: "auto"; AWS: mis. ap-southeast-2
+LLM_S3_ENDPOINT="https://<account>.r2.cloudflarestorage.com"   # kosongkan untuk AWS
+LLM_S3_ACCESS_KEY_ID="..."
+LLM_S3_SECRET_ACCESS_KEY="..."
+LLM_S3_PREFIX="models/"           # objek: models/<nama-file>.gguf
+LLM_S3_FORCE_PATH_STYLE="true"    # wajib untuk R2/MinIO
+
+# B) Vercel Blob (storage bawaan) - unggah file lalu isi base URL publik
+LLM_BLOB_BASE_URL="https://<store>.public.blob.vercel-storage.com"
+# BLOB_READ_WRITE_TOKEN otomatis tersedia bila Blob store terhubung ke project
+# LLM_BLOB_PRIVATE="true"         # bila store privat (memakai token di header)
+
+# C) Base URL generik / CDN
+LLM_MODEL_BASE_URL="https://cdn.contoh.com/models"
+
+# Verifikasi objek ada di bucket TANPA memuat model
+curl -s ${origin}/api/storage/check | head -40
+
+# Unggah sekali dari komputer lokal (AWS CLI / rclone)
+aws s3 cp Qwen2.5-0.5B-Instruct-Q4_K_M.gguf s3://lollm-models/models/`;
+
       els.utcpSnippet.textContent = `# 1) Server ini menerbitkan manual UTCP di /.well-known/utcp
 curl -s ${origin}/.well-known/utcp | head -40
 
@@ -2050,6 +2091,20 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
       els.cpuInfo.textContent = h.runtime?.cpu_arch || 'CPU SIMD';
       els.healthUpdated.textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       els.telemetryAge.textContent = 'live';
+
+      if (els.modelSourceHint) {
+        const storage = h.model_storage;
+        if (storage?.configured) {
+          const modeLabel = storage.mode === 'auto' ? 'auto (S3 → Blob → URL → HF)' : storage.mode;
+          const last = h.last_download;
+          els.modelSourceHint.textContent = last
+            ? `Sumber model: ${modeLabel} · terakhir ${last.source_label} (${(last.duration_ms / 1000).toFixed(1)} dtk)`
+            : `Sumber model: ${modeLabel}`;
+        } else {
+          els.modelSourceHint.textContent =
+            'Sumber model: Hugging Face — isi LLM_S3_* atau LLM_BLOB_BASE_URL agar model diambil dari storage sendiri.';
+        }
+      }
 
       renderModelCards(h.cached_models || []);
     }
@@ -2391,6 +2446,19 @@ LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
       try {
         const t0 = performance.now();
         const res = await fetch('/api/utcp', { cache: 'no-store' });
+        const json = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);
+      } catch (err) {
+        els.liveApiOutput.textContent = `Error: ${err.message}`;
+      }
+    });
+
+    els.testStorageBtn.addEventListener('click', async () => {
+      els.liveApiOutput.textContent = 'Memanggil GET /api/storage ...';
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/api/storage', { cache: 'no-store' });
         const json = await res.json();
         const ms = Math.round(performance.now() - t0);
         els.liveApiOutput.textContent = `// HTTP ${res.status} (${ms} ms)\n` + JSON.stringify(json, null, 2);

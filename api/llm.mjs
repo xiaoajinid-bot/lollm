@@ -7,6 +7,11 @@ import {
   runChatInference,
 } from '../lib/llm-engine.mjs';
 import { executeToolCall, getToolRegistry, listTools } from '../lib/tools.mjs';
+import {
+  describeModelStorage,
+  modelSourcePlan,
+  probeModelSource,
+} from '../lib/model-storage.mjs';
 import { runToolAgent } from '../lib/agent.mjs';
 import {
   UTCP_MANUAL_VERSION,
@@ -26,6 +31,8 @@ const AVAILABLE_ENDPOINTS = [
   'GET /api/health',
   'POST /api/warmup',
   'GET /v1/models',
+  'GET /api/storage',
+  'GET /api/storage/check',
   'POST /v1/chat/completions',
   'GET /api/tools',
   'POST /api/tools',
@@ -149,10 +156,50 @@ export default async function handler(req, res) {
       return;
     }
 
+    // 1b. Penyimpanan model (S3 / Vercel Blob / base URL)
+    if (req.method === 'GET' && route === '/api/storage') {
+      sendJson(res, 200, {
+        ok: true,
+        storage: describeModelStorage(process.env, MODEL_CATALOG),
+        hint: 'Set env LLM_S3_* atau LLM_BLOB_BASE_URL, lalu cek dengan GET /api/storage/check.',
+      });
+      return;
+    }
+
+    // 1c. Verifikasi objek model benar-benar ada di sumber yang dikonfigurasi
+    if ((req.method === 'GET' || req.method === 'POST') && route === '/api/storage/check') {
+      const storage = describeModelStorage(process.env, MODEL_CATALOG);
+      const results = await Promise.all(
+        MODEL_CATALOG.map(async (spec) => {
+          const plan = modelSourcePlan(spec, process.env);
+          if (!plan.length) {
+            return {
+              id: spec.id,
+              expected_size_mb: spec.sizeMb,
+              ok: false,
+              error: 'tidak ada sumber aktif untuk model ini',
+            };
+          }
+          const probe = await probeModelSource({ source: plan[0] });
+          return { id: spec.id, expected_size_mb: spec.sizeMb, checked_source: plan[0].source, ...probe };
+        })
+      );
+
+      const ok = results.every((item) => item.ok);
+      sendJson(res, ok ? 200 : 502, {
+        ok,
+        checked_at: new Date().toISOString(),
+        storage,
+        results,
+      });
+      return;
+    }
+
     // 2. OpenAI-Compatible Models List
     if (req.method === 'GET' && (route === '/v1/models' || route === '/api/models')) {
       const health = await getSystemHealth();
       const cacheMap = new Map(health.cached_models.map((m) => [m.id, m]));
+      const storageMap = new Map((health.model_storage?.models || []).map((m) => [m.id, m]));
       const created = Math.floor(Date.now() / 1000);
       sendJson(res, 200, {
         object: 'list',
@@ -174,6 +221,7 @@ export default async function handler(req, res) {
             description: m.description,
             loaded_in_ram: Boolean(state?.loaded_in_ram),
             cached_on_tmp: Boolean(state?.cached_on_tmp),
+            storage_source: storageMap.get(m.id)?.source || null,
           };
         }),
       });

@@ -54,6 +54,8 @@ Seluruh endpoint sudah dilengkapi header `Access-Control-Allow-Origin: *` sehing
 | `POST` | `/api/warmup` | Preload model GGUF ke RAM container |
 | `GET` | `/v1/models` | Daftar model kompatibel OpenAI SDK |
 | `POST` | `/v1/chat/completions` | Chat Completions OpenAI (`stream: true` SSE & `stream: false` JSON) |
+| `GET` | `/api/storage` | Konfigurasi sumber model (S3 / Blob / base URL) tanpa membocorkan secret |
+| `GET` | `/api/storage/check` | Verifikasi objek GGUF benar-benar ada di storage (Range 1 byte) |
 | `GET` | `/api/tags` | Daftar model kompatibel Ollama |
 | `POST` | `/api/generate` | Endpoint generasi kompatibel Ollama |
 
@@ -93,6 +95,108 @@ for chunk in resp:
 ```
 
 ---
+
+## Penyimpanan Model (S3 / Vercel Blob)
+
+Secara default GGUF diunduh dari Hugging Face ke `/tmp` pada setiap cold start.
+Karena filesystem Vercel bersifat sementara, **file tetap harus ada di `/tmp` sebelum
+llama.cpp memuatnya** — storage eksternal tidak menghapus unduhan itu, tetapi membuatnya:
+
+- lebih cepat & stabil (bucket sendiri, satu region, tanpa rate limit Hugging Face),
+- bisa privat (presigned URL, tidak ada file model yang publik),
+- tidak bergantung pada ketersediaan `huggingface.co`.
+
+### Urutan sumber (`LLM_MODEL_SOURCE=auto`, default)
+
+```
+S3 (LLM_S3_*)  ->  Vercel Blob (LLM_BLOB_*)  ->  base URL (LLM_MODEL_BASE_URL)  ->  Hugging Face
+```
+
+Sumber pertama yang aktif dicoba; bila gagal (404/403/jaringan), sumber berikutnya
+dicoba otomatis. Mode eksplisit (`LLM_MODEL_SOURCE=s3|blob|url|huggingface`) memakai
+satu sumber saja tanpa fallback. Nama objek selalu `LLM_S3_PREFIX` + nama file model,
+mis. `models/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`.
+
+### Environment variable
+
+| Variabel | Default | Fungsi |
+|---|---|---|
+| `LLM_MODEL_SOURCE` | `auto` | `auto`, `s3`, `blob`, `url`, atau `huggingface` |
+| `LLM_S3_BUCKET` | – | Nama bucket (mengaktifkan sumber S3) |
+| `LLM_S3_REGION` | ditebak dari endpoint / `us-east-1` | Region penandatanganan SigV4 (`auto` untuk R2) |
+| `LLM_S3_ENDPOINT` | `https://s3.<region>.amazonaws.com` | Endpoint S3-compatible (R2, B2, MinIO, Wasabi, Supabase) |
+| `LLM_S3_ACCESS_KEY_ID` / `LLM_S3_SECRET_ACCESS_KEY` | fallback ke `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Kredensial untuk presigned GET |
+| `LLM_S3_SESSION_TOKEN` | fallback `AWS_SESSION_TOKEN` | Token STS bila memakai kredensial sementara |
+| `LLM_S3_PREFIX` | `models/` | Folder objek di dalam bucket |
+| `LLM_S3_FORCE_PATH_STYLE` | `true` untuk endpoint kustom | Path-style (`endpoint/bucket/key`) — wajib untuk R2/MinIO |
+| `LLM_S3_PUBLIC_BASE_URL` | – | Alternatif tanpa kredensial: base URL CDN/publik |
+| `LLM_S3_PRESIGN_TTL` | `900` | Masa berlaku presigned URL (detik, 60–604800) |
+| `LLM_BLOB_BASE_URL` | – | Base URL store Vercel Blob (`https://<store>.public.blob.vercel-storage.com`) |
+| `BLOB_READ_WRITE_TOKEN` | otomatis | Token Blob; dipakai hanya jika `LLM_BLOB_PRIVATE=true` |
+| `LLM_BLOB_PRIVATE` | `false` | Kirim header `Authorization: Bearer <token>` saat mengambil blob privat |
+| `LLM_MODEL_BASE_URL` | – | Base URL generik/CDN: `<base>/<nama-file>.gguf` |
+
+### Contoh: Cloudflare R2
+
+```bash
+LLM_S3_BUCKET="lollm-models"
+LLM_S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
+LLM_S3_REGION="auto"
+LLM_S3_ACCESS_KEY_ID="<access-key>"
+LLM_S3_SECRET_ACCESS_KEY="<secret-key>"
+LLM_S3_PREFIX="models/"
+LLM_S3_FORCE_PATH_STYLE="true"
+```
+
+### Contoh: AWS S3
+
+```bash
+LLM_S3_BUCKET="lollm-models"
+LLM_S3_REGION="ap-southeast-2"
+# LLM_S3_ENDPOINT dikosongkan -> virtual-host style
+LLM_S3_ACCESS_KEY_ID="<access-key>"
+LLM_S3_SECRET_ACCESS_KEY="<secret-key>"
+```
+
+### Contoh: Vercel Blob (storage bawaan)
+
+1. Buat Blob store di dashboard Vercel lalu hubungkan ke project (`BLOB_READ_WRITE_TOKEN`
+   otomatis tersedia sebagai env).
+2. Unggah file GGUF (dashboard, atau `vercel blob put <file>` pada Vercel CLI terbaru).
+3. Isi base URL publik store:
+
+```bash
+LLM_BLOB_BASE_URL="https://<store-id>.public.blob.vercel-storage.com"
+# LLM_BLOB_PRIVATE="true"   # bila store disetel privat
+```
+
+### Mengunggah model sekali dari komputer lokal
+
+```bash
+aws s3 cp Qwen2.5-0.5B-Instruct-Q4_K_M.gguf s3://lollm-models/models/
+# atau dengan rclone (R2/MinIO/B2)
+rclone copy Qwen2.5-0.5B-Instruct-Q4_K_M.gguf r2:lollm-models/models/
+```
+
+### Verifikasi tanpa memuat model
+
+```bash
+curl -s https://lollm-psi.vercel.app/api/storage | jq '.storage.models'
+curl -s https://lollm-psi.vercel.app/api/storage/check | jq '.results'
+```
+
+`/api/storage/check` melakukan `GET` dengan `Range: bytes=0-0` ke objek tiap model,
+lalu melaporkan `ok`, status HTTP, dan ukuran file — cukup untuk memastikan bucket,
+kredensial, prefix, dan nama file sudah benar.
+
+### Catatan performa
+
+- Status sumber terakhir terlihat di `GET /api/health` (`last_download.source`,
+  `last_download.duration_ms`) dan di panel model pada UI.
+- `/tmp` pada Vercel Functions maksimal ~512 MB; model > 400 MB akan menghapus model
+  lain yang tersimpan (perilaku lama tetap dipertahankan).
+- Menaruh bucket di region yang sama dengan function (mis. `iad1`) memberi unduhan
+  paling cepat; Hugging Face tetap dipakai sebagai fallback bila bucket belum siap.
 
 ## Function / Tool Calling & Connector
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { Readable } from 'node:stream';
 import { register } from 'node:module';
 import test from 'node:test';
@@ -504,4 +505,88 @@ test('GET /api/tools menyertakan tool UTCP dan POST /api/tools?tool= bisa memang
       }
     }
   );
+});
+
+/* ------------------------------------------------- penyimpanan model (S3) */
+
+test('GET /api/storage mengembalikan konfigurasi sumber model tanpa secret', async () => {
+  resetStub();
+  await withEnv(
+    {
+      LLM_S3_BUCKET: 'lollm-models',
+      LLM_S3_REGION: 'ap-southeast-2',
+      LLM_S3_ACCESS_KEY_ID: 'AKIA-RAHASIA',
+      LLM_S3_SECRET_ACCESS_KEY: 'SECRET-RAHASIA',
+    },
+    async () => {
+      const res = await call({ method: 'GET', url: '/api/llm?__route=api/storage' });
+      assert.equal(res.statusCode, 200);
+
+      const body = res.json;
+      assert.equal(body.ok, true);
+      assert.equal(body.storage.configured, true);
+      assert.equal(body.storage.s3.bucket, 'lollm-models');
+      assert.equal(body.storage.s3.signing, 'presigned');
+      assert.equal(body.storage.models[0].source, 's3');
+
+      const serialized = res.text;
+      assert.ok(!serialized.includes('SECRET-RAHASIA'));
+      assert.ok(!serialized.includes('AKIA-RAHASIA'));
+      assert.ok(!serialized.includes('X-Amz-Signature'));
+    }
+  );
+});
+
+test('GET /api/storage/check memverifikasi objek lewat permintaan Range', async () => {
+  resetStub();
+  const server = http.createServer((req, res) => {
+    if (req.headers.range === 'bytes=0-0') {
+      res.writeHead(206, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Range': 'bytes 0-0/397284474',
+        'Content-Length': '1',
+      });
+      res.end('x');
+      return;
+    }
+    res.writeHead(200, { 'Content-Length': '1' });
+    res.end('x');
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+
+  try {
+    await withEnv({ LLM_MODEL_BASE_URL: `http://127.0.0.1:${port}/models` }, async () => {
+      const res = await call({ method: 'GET', url: '/api/llm?__route=api/storage/check' });
+      assert.equal(res.statusCode, 200);
+
+      const body = res.json;
+      assert.equal(body.ok, true);
+      assert.equal(body.results.length, 1);
+      assert.equal(body.results[0].ok, true);
+      assert.equal(body.results[0].status, 206);
+      assert.equal(body.results[0].size_mb, 379);
+      assert.equal(body.results[0].checked_source, 'url');
+    });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('GET /api/storage/check mengembalikan 502 bila objek tidak bisa diakses', async () => {
+  resetStub();
+  // Port yang sudah ditutup: koneksi ditolak, probe harus melaporkan gagal (bukan melempar)
+  const server = http.createServer(() => {});
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+
+  await withEnv({ LLM_MODEL_BASE_URL: `http://127.0.0.1:${port}/models` }, async () => {
+    const res = await call({ method: 'GET', url: '/api/llm?__route=api/storage/check' });
+    assert.equal(res.statusCode, 502);
+    assert.equal(res.json.ok, false);
+    assert.equal(res.json.results[0].ok, false);
+    assert.ok(res.json.results[0].error);
+  });
 });

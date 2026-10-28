@@ -159,7 +159,26 @@ const FIXTURES = {
     },
     stats: { lastTokensPerSecond: 24.5, requestsServed: 7 },
     cached_models: [],
+    last_download: null,
+    model_storage: {
+      mode: 'auto',
+      configured: true,
+      s3: { configured: true, bucket: 'lollm-models', region: 'ap-southeast-2', signing: 'presigned' },
+      blob: { configured: false },
+      generic: { configured: false },
+      models: [{ id: 'qwen2.5-0.5b-instruct', source: 's3', source_label: 'S3 (lollm-models)', fallback_sources: ['huggingface'] }],
+    },
   },
+  storage: {
+    ok: true,
+    storage: {
+      mode: 'auto',
+      configured: true,
+      s3: { configured: true, bucket: 'lollm-models', region: 'ap-southeast-2' },
+      models: [{ id: 'qwen2.5-0.5b-instruct', source: 's3', url_preview: 'https://lollm-models.s3.ap-southeast-2.amazonaws.com/models/qwen.gguf' }],
+    },
+  },
+  storageCheck: { ok: true, results: [{ id: 'qwen2.5-0.5b-instruct', ok: true, status: 206, size_mb: 379 }] },
   utcp: {
     ok: true,
     utcp_version: '1.0.0',
@@ -200,6 +219,8 @@ async function createApp({ mobile = false, chat = {} } = {}) {
         if (url === '/v1/models') return json(FIXTURES.models);
         if (url === '/api/health') return json(FIXTURES.health);
         if (url === '/api/utcp') return json(FIXTURES.utcp);
+        if (url === '/api/storage') return json(FIXTURES.storage);
+        if (url === '/api/storage/check') return json(FIXTURES.storageCheck);
         if (url.startsWith('/api/warmup')) {
           return json({ name: 'qwen2.5-0.5b-instruct', cold_load: false, load_ms: 10, health: FIXTURES.health });
         }
@@ -534,6 +555,33 @@ async function createApp({ mobile = false, chat = {} } = {}) {
     'clear saat streaming: tidak ada pesan assistant yatim di request berikutnya',
     body.messages.filter((m) => m.role === 'assistant').length === 0,
     JSON.stringify(body.messages.map((m) => m.role))
+  );
+}
+
+/* 12. Panel sumber model & endpoint penyimpanan */
+{
+  const { doc, window } = await createApp();
+
+  assert(
+    'storage: hint sumber model menyebut mode auto',
+    doc.getElementById('modelSourceHint').textContent.includes('auto'),
+    doc.getElementById('modelSourceHint').textContent
+  );
+  assert(
+    'storage: snippet S3 terisi',
+    doc.getElementById('storageSnippet').textContent.includes('LLM_S3_BUCKET') &&
+      doc.getElementById('storageSnippet').textContent.includes('LLM_BLOB_BASE_URL')
+  );
+  assert(
+    'storage: pill endpoint /api/storage ada',
+    [...doc.querySelectorAll('.ep-pill code')].some((code) => code.textContent === '/api/storage')
+  );
+
+  doc.getElementById('testStorageBtn').dispatchEvent(new window.Event('click', { bubbles: true }));
+  await waitFor(() => doc.getElementById('liveApiOutput').textContent.includes('HTTP 200'));
+  assert(
+    'storage: tester menampilkan konfigurasi bucket',
+    doc.getElementById('liveApiOutput').textContent.includes('lollm-models')
   );
 }
 

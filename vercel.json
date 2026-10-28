@@ -29,6 +29,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/storage/check",
+      "destination": "/api/llm?__route=api/storage/check"
+    },
+    {
+      "source": "/api/storage",
+      "destination": "/api/llm?__route=api/storage"
+    },
+    {
       "source": "/v1/utcp",
       "destination": "/api/llm?__route=api/utcp"
     },
