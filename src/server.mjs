@@ -22,6 +22,21 @@ const PLAYGROUND_FILE = path.join(here, "..", "web", "playground.html");
  *          logger: import("./logger.mjs").Logger}} deps
  */
 export function createServer(deps) {
+  return http.createServer(createHandler(deps));
+}
+
+/**
+ * Build the request handler only (no listening socket). Serverless platforms
+ * such as Vercel hand us a single request/response pair, and this is the seam
+ * they reuse so the whole API — Ollama, OpenAI and the playground — runs there
+ * unchanged.
+ *
+ * @param {{config: import("./config.mjs").Config,
+ *          store: import("./models/store.mjs").ModelStore,
+ *          engine: import("./engine/engine.mjs").Engine,
+ *          logger: import("./logger.mjs").Logger}} deps
+ */
+export function createHandler(deps) {
   const { config, store, engine, logger } = deps;
   const router = new Router();
   const nativeApi = createNativeApi({ engine, store, config, logger });
@@ -47,7 +62,7 @@ export function createServer(deps) {
     router.get("/ui", playground);
   }
 
-  const server = http.createServer(async (req, res) => {
+  const handle = async (/** @type {import("node:http").IncomingMessage} */ req, /** @type {import("node:http").ServerResponse} */ res) => {
     const startedAt = Date.now();
     const requestId = Math.random().toString(36).slice(2, 10);
     res.setHeader("X-Request-Id", requestId);
@@ -114,14 +129,9 @@ export function createServer(deps) {
         logger.debug(`${req.method} ${url.pathname} ${res.statusCode} ${Date.now() - startedAt}ms`);
       }
     }
-  });
+  };
 
-  server.on("clientError", (error, socket) => {
-    logger.warn(`client error: ${error.message}`);
-    if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
-  });
-
-  return server;
+  return handle;
 }
 
 /**
@@ -135,6 +145,10 @@ export function createServer(deps) {
 export async function startServer(deps) {
   const { config, engine, logger } = deps;
   const server = createServer(deps);
+  server.on("clientError", (error, socket) => {
+    logger.warn(`client error: ${error.message}`);
+    if (socket.writable) socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+  });
   await new Promise((resolve, reject) => {
     const onError = (error) => {
       server.off("listening", onListening);

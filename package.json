@@ -1,6 +1,6 @@
 {
   "name": "lollm",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Ollama-compatible local LLM server for Node.js, powered by llama.cpp via node-llama-cpp. OpenAI-compatible API included.",
   "keywords": [
     "llm",

@@ -178,6 +178,20 @@ Struktur penyimpanan:
 └── manifests/lollm.local/library/<model>/<tag>
 ```
 
+## Deploy ke Vercel
+
+API dan playground yang sama bisa jalan sebagai serverless function:
+
+```bash
+npx vercel link --project lollm-ai
+npx vercel deploy --prod
+```
+
+`api/index.mjs` meneruskan request ke router lokal, jadi `/api/*`, `/v1/*`, streaming, dan
+`/playground` tetap sama. Backend `mock` dipakai default di Vercel (tanpa binding native) dan satu
+model demo kecil otomatis dibuat saat boot. Inference llama.cpp asli butuh binding native + model di
+`/tmp` — lihat [docs/vercel.md](docs/vercel.md).
+
 ## Modelfile
 
 ```dockerfile
@@ -222,7 +236,7 @@ lollm run tutor "Apa itu GGUF?"
 ## Menguji
 
 ```bash
-npm test        # 110 tes, tanpa unduh model, tanpa GPU, tanpa jaringan
+npm test        # 111 tes, tanpa unduh model, tanpa GPU, tanpa jaringan
 npm run check   # cek sintaks semua modul
 ```
 

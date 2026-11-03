@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/).
 
+## [0.2.1] — 2026-11-03
+
+### Added
+
+- **Vercel deployment**: `api/index.mjs` reuses the local router as a serverless handler (no
+  listening socket), `vercel.json` wires rewrites, function size/duration and `includeFiles`, and a
+  2.4 KB demo GGUF is seeded on a cold store so `/playground` works immediately with the mock
+  backend. See [docs/vercel.md](docs/vercel.md).
+- `createHandler()` in `src/server.mjs` — the request handler without the socket, shared by
+  `lollm serve` and the serverless entrypoint.
+- `test/vercel.test.mjs` boots the entrypoint against a temporary home and exercises `/`,
+  `/api/version`, `/api/tags`, `/playground`, `/api/chat` and `/v1/chat/completions`.
+
 ## [0.2.0] — 2026-11-03
 
 ### Changed
@@ -72,6 +85,6 @@ First public release.
 - **Playground** at `/playground` with streaming chat, model picker and sampling controls.
 - Engine lifecycle management: keep-alive, LRU eviction, concurrency limits, request queueing,
   client-disconnect aborts and graceful shutdown.
-- 110 tests covering GGUF parsing, HTTP Range access and resumable downloads, Modelfiles,
+- 111 tests covering GGUF parsing, HTTP Range access and resumable downloads, Modelfiles,
   templates, the model store, the engine, both APIs and the CLI.
 - Dockerfile, GitHub Actions CI, English and Indonesian documentation.
