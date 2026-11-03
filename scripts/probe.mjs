@@ -29,6 +29,25 @@ const tags = await (await fetch(`${base}/api/tags`, { signal: AbortSignal.timeou
 const models = (tags.models ?? []).map((entry) => entry.name);
 const target = model || models[0];
 
+/**
+ * @param {number} startedAt
+ * @param {any} body
+ */
+function describe(startedAt, body) {
+  const at = (/** @type {number | undefined} */ value) => (value ? Math.round(value / 1e6) : undefined);
+  return {
+    status: 200,
+    content: String(body.message?.content ?? "").slice(0, 120),
+    prompt_eval_count: body.prompt_eval_count,
+    eval_count: body.eval_count,
+    total_ms: Date.now() - startedAt,
+    reported_total_ms: at(body.total_duration),
+    load_ms: at(body.load_duration),
+    prompt_eval_ms: at(body.prompt_eval_duration),
+    eval_ms: at(body.eval_duration),
+  };
+}
+
 const chatStartedAt = Date.now();
 let chat;
 try {
@@ -44,24 +63,40 @@ try {
     signal: AbortSignal.timeout(280_000),
   });
   const body = await response.json();
-  chat = {
-    status: response.status,
-    content: String(body.message?.content ?? "").slice(0, 120),
-    eval_count: body.eval_count,
-    total_ms: body.total_duration ? Math.round(body.total_duration / 1e6) : undefined,
-    load_ms: body.load_duration ? Math.round(body.load_duration / 1e6) : undefined,
-    error: body.error,
-  };
+  chat = body.error ? { status: response.status, error: body.error } : describe(chatStartedAt, body);
 } catch (error) {
   chat = { error: String(/** @type {Error} */ (error)?.message ?? error) };
 }
 
-const report = { base, model: target, models, bootMs, boot, chatMs: Date.now() - chatStartedAt, chat };
+// A second request on the same instance shows the warm path: no boot, no download,
+// no model load.
+const warmStartedAt = Date.now();
+let warm;
+try {
+  const response = await fetch(`${base}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: target,
+      messages: [{ role: "user", content: "Hi again" }],
+      stream: false,
+      options: { num_predict: numPredict },
+    }),
+    signal: AbortSignal.timeout(280_000),
+  });
+  const body = await response.json();
+  warm = body.error ? { status: response.status, error: body.error } : describe(warmStartedAt, body);
+} catch (error) {
+  warm = { error: String(/** @type {Error} */ (error)?.message ?? error) };
+}
+
+const report = { base, model: target, models, bootMs, boot, chat, warm };
 if (json) console.log(JSON.stringify(report, null, 2));
 else {
   console.log(`base      ${report.base}`);
   console.log(`models    ${models.join(", ") || "(none)"}`);
   console.log(`boot      ${bootMs} ms  ${JSON.stringify(boot)}`);
-  console.log(`chat      ${report.chatMs} ms  ${JSON.stringify(chat)}`);
+  console.log(`chat      ${JSON.stringify(chat)}`);
+  console.log(`warm      ${JSON.stringify(warm)}`);
 }
-process.exit(chat.error ? 1 : 0);
+process.exit(chat.error || warm.error ? 1 : 0);
