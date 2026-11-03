@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: Base URL of a running lollm instance
+        description: "Base URL of a running lollm instance"
         required: false
         default: https://lollm-ai-pied.vercel.app
       model:
-        description: Model to chat with (default: first one in /api/tags)
+        description: "Model to chat with (default: first one in /api/tags)"
         required: false
   push:
     branches: ["**"]
