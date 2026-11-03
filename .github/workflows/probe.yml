@@ -23,8 +23,13 @@ jobs:
         env:
           BASE_URL: https://lollm-ai-git-${{ github.ref_name }}-xiaoajinid-bots-projects.vercel.app
         run: |
-          node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.json || true
-          test -s probe.json || echo '{"error":"probe produced no report"}' > probe.json
+          node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.raw 2> probe.err || true
+          node -e '
+            const fs = require("fs");
+            const raw = fs.existsSync("probe.raw") ? fs.readFileSync("probe.raw", "utf8").trim() : "";
+            const err = fs.existsSync("probe.err") ? fs.readFileSync("probe.err", "utf8").trim() : "";
+            fs.writeFileSync("probe.json", raw ? raw : JSON.stringify({ error: "no stdout", stderr: err }, null, 2));
+          '
           cat probe.json
       - name: Publish the probe as a check run
         if: always()
