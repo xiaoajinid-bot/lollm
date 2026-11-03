@@ -50,7 +50,8 @@
     "test": "node --test --test-timeout=60000 test/*.test.mjs",
     "test:watch": "node --test --watch test/*.test.mjs",
     "check": "node --check bin/lollm.mjs && for f in $(find src test scripts -name '*.mjs'); do node --check \"$f\" || exit 1; done",
-    "verify:remote": "node scripts/verify-remote.mjs"
+    "verify:remote": "node scripts/verify-remote.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "optionalDependencies": {
     "node-llama-cpp": "^3.22.2"

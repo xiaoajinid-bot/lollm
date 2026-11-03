@@ -1,0 +1,71 @@
+name: Smoke test a deployed instance
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Base URL of a running lollm instance"
+        required: false
+        default: https://lollm-ai-pied.vercel.app
+      model:
+        description: "Model to chat with (default: first one in /api/tags)"
+        required: false
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  smoke:
+    # Run on demand, or from a commit message containing [smoke].
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[smoke]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+      - name: Resolve target URL
+        id: target
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          VAR_URL: ${{ vars.LOLLM_SMOKE_URL }}
+        run: |
+          url="$INPUT_URL"
+          if [ -z "$url" ]; then url="$VAR_URL"; fi
+          if [ -z "$url" ]; then
+            slug=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-')
+            url="https://lollm-ai-git-${slug}-xiaoajinid-bots-projects.vercel.app"
+          fi
+          echo "Resolved $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Smoke test
+        id: smoke
+        continue-on-error: true
+        env:
+          BASE_URL: ${{ steps.target.outputs.url }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          status=0
+          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000 --json > smoke-report.json || status=$?
+          cat smoke-report.json
+          exit $status
+      - name: Publish the report as a check run
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-report.mjs smoke-report.json --name "lollm smoke report"
+
+      - name: Fail when a check failed
+        if: steps.smoke.outcome != 'success'
+        run: exit 1
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: smoke-report.json
+          if-no-files-found: ignore

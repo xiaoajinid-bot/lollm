@@ -1,12 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --omit=optional --ignore-scripts --no-audit --no-fund",
+  "framework": null,
+  "installCommand": "npm ci --ignore-scripts --no-audit --no-fund && node scripts/vercel-prune.mjs",
   "functions": {
     "api/index.mjs": {
       "maxDuration": 300,
       "memory": 1024,
-      "includeFiles": "{web/**,examples/demo-model.gguf}"
+      "includeFiles": "{web/**,examples/demo-model.gguf,node_modules/node-llama-cpp/**,node_modules/@node-llama-cpp/linux-x64/**}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index.mjs" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.mjs"
+    }
+  ]
 }

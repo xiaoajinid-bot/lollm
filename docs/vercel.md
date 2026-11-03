@@ -21,13 +21,14 @@ Browser / SDK ─► Vercel Function (api/index.mjs) ─► lollm router ─► 
 | `/playground` | ✅ |
 | `lollm inspect`-style remote GGUF header reads (`/api/show` on a remote model) | ✅ (a few hundred KB per header, perfect for serverless) |
 | `POST /api/pull` | ✅ but the file lands in `/tmp` and is lost when the instance is recycled |
-| Real llama.cpp inference | ⚠️ needs the native binding, see below |
+| `scripts/smoke.mjs` against a deployed instance | ✅ `npm run smoke -- https://<deployment>` |
+| Real llama.cpp inference | ✅ small GGUFs pulled into `/tmp`, see [Real models](#real-models-llamacpp-in-the-function) |
 | Persistent model storage | ❌ `/tmp` only (~512 MB, ephemeral) |
 
-The function uses the deterministic **mock backend** by default, because the native llama.cpp
-binding is not part of the Vercel build. To make the hosted playground useful out of the box, the
-first invocation seeds a tiny demo model (`examples/demo-model.gguf`, 2.4 KB) as
-`lollm-demo:latest`. Disable with `LOLLM_SEED_DEMO=0`.
+The function runs the real llama.cpp backend (`LOLLM_BACKEND=llama`) and pulls a small GGUF into
+`/tmp` on first use — see [Real models](#real-models-llamacpp-in-the-function). With
+`LOLLM_BACKEND=mock` it instead seeds a tiny placeholder model (`examples/demo-model.gguf`,
+2.4 KB) as `lollm-demo:latest`, which is what CI uses; disable with `LOLLM_SEED_DEMO=0`.
 
 ## Configuration
 
@@ -35,25 +36,32 @@ first invocation seeds a tiny demo model (`examples/demo-model.gguf`, 2.4 KB) as
 
 ```json
 {
-  "installCommand": "npm ci --omit=optional --ignore-scripts --no-audit --no-fund",
+  "framework": null,
+  "installCommand": "npm ci --ignore-scripts --no-audit --no-fund && node scripts/vercel-prune.mjs",
   "functions": {
     "api/index.mjs": {
       "maxDuration": 300,
       "memory": 1024,
-      "includeFiles": "{web/**,examples/demo-model.gguf}"
+      "includeFiles": "{web/**,examples/demo-model.gguf,node_modules/node-llama-cpp/**,node_modules/@node-llama-cpp/linux-x64/**}"
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index.mjs" }]
 }
 ```
 
+`"framework": null` matters: without it Vercel detects a Node *server* from `main`/`start` in
+`package.json`, builds `src/index.mjs` as the root lambda (it has no request handler) and drops the
+rewrites, so every request fails with `FUNCTION_INVOCATION_FAILED`.
+
 Environment variables:
 
 | Variable | Default on Vercel | Meaning |
 |---|---|---|
 | `LOLLM_HOME` | private `mkdtemp` directory in the platform temp dir | data directory (only the temp dir is writable) |
-| `LOLLM_BACKEND` | `mock` | `mock` or `llama` |
-| `LOLLM_SEED_DEMO` | `1` | seed `lollm-demo:latest` when the store is empty |
+| `LOLLM_BACKEND` | `llama` | `mock` or `llama` |
+| `LOLLM_BOOT_MODEL` | SmolLM2-360M-Instruct Q4_K_M (`hf:`) | model pulled into `/tmp` on first use; `0` disables |
+| `LOLLM_BOOT_MODEL_NAME` | `smollm2:360m` | name the boot model is stored under |
+| `LOLLM_SEED_DEMO` | `1` | seed `lollm-demo:latest` when the store is empty (mock backend only) |
 | `LOLLM_PLAYGROUND` | `1` | serve `/playground` |
 | `LOLLM_MAX_TOKENS` | unset (unlimited) | optional output-token cap |
 | `LOLLM_CONTEXT_SIZE` | unset (model default) | optional context clamp |
@@ -76,9 +84,14 @@ After the first deploy, check:
 
 ```bash
 curl -s https://<deployment>/api/version
+curl -s https://<deployment>/api/boot     # cold start: backend, boot model, timings, errors
 curl -s https://<deployment>/api/tags
 open  https://<deployment>/playground
 ```
+
+`npm run smoke -- https://<deployment>` runs the full round trip (version, tags, playground,
+streaming and non-streaming chat, OpenAI endpoint) and exits non-zero on the first failure. The
+"Smoke test a deployed instance" workflow does the same on demand from GitHub.
 
 ## Making the deployment public
 
@@ -88,31 +101,45 @@ Deployment Protection* and set **Vercel Authentication** to **Disabled** (or att
 which is not covered by the default `all_except_custom_domains` policy). Preview deployments stay
 private unless you disable protection for them too.
 
-## Real inference on Vercel (opt-in)
+## Real models (llama.cpp in the function)
 
-llama.cpp is a native addon. Vercel's function bundle is capped (~250 MB uncompressed) and `/tmp`
-is ~512 MB, so only small quantized models fit. If you want it:
+The hosted instance runs genuine llama.cpp inference, not the mock backend:
 
-1. Add the prebuilt binding to the deployment:
+- `node-llama-cpp` plus the prebuilt `@node-llama-cpp/linux-x64` binary (~74 MB) are traced into the
+  function. `scripts/vercel-prune.mjs` deletes the CUDA/Vulkan/arm flavours that npm also installs,
+  which would otherwise push the bundle past the 250 MB limit.
+- Weights are far too large to ship, so the first invocation of each instance pulls a small GGUF
+  into the temporary model store (`/tmp`, ~512 MB) and then serves it:
 
-   ```bash
-   npm install @node-llama-cpp/linux-x64@3.22.2 node-llama-cpp@3.22.2
-   ```
+  | Setting | Default |
+  |---|---|
+  | `LOLLM_BACKEND` | `llama` on Vercel (`mock` in CI) |
+  | `LOLLM_BOOT_MODEL` | `hf:bartowski/SmolLM2-360M-Instruct-GGUF:SmolLM2-360M-Instruct-Q4_K_M.gguf` (258 MB) |
+  | `LOLLM_BOOT_MODEL_NAME` | `smollm2:360m` |
 
-   and drop `--omit=optional` from `installCommand` (keep `--ignore-scripts`; the binaries ship in
-   the platform package).
+  Set `LOLLM_BOOT_MODEL=0` to skip the boot pull, or point it at any `hf:`, `https://` or `file:`
+  reference. `Qwen2.5-0.5B-Instruct q2_k` (415 MB) is the largest that still fits comfortably.
 
-2. Set `LOLLM_BACKEND=llama`.
+Measured on the `lollm-ai` Hobby deployment (2 vCPU):
 
-3. Fetch a model into `/tmp` at runtime. `POST /api/pull` with a small GGUF works, e.g.
+| Phase | Time |
+|---|---|
+| cold boot: pull 258 MB + hash + manifest | ~4–6 s |
+| first completion on a fresh instance (cold file cache) | ~90 s |
+| second completion on the same instance | ~1.3 s of generation for 16 tokens (~13 tok/s) |
+| model load per request buffer | ~1.8 s |
 
-   ```bash
-   curl -s https://<deployment>/api/pull -d '{"model":"hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF:qwen2.5-0.5b-instruct-q4_k_m.gguf","name":"qwen2.5:0.5b","stream":false}'
-   ```
+Two things matter for that second row:
 
-   and then chat with it. Downloads count against the 300 s function budget and the ~512 MB `/tmp`
-   allowance: a Q4_K_M 0.5B model (~400 MB) is about the practical ceiling.
+- `scripts/vercel-prune.mjs` keeps only the linux-x64 binary, and the adapter caps `LOLLM_THREADS`
+  at `os.availableParallelism()` (max 4). A sandbox reports the host's core count (64+), and letting
+  llama.cpp spawn that many workers on 2 vCPUs drops generation to ~0.1 tok/s.
+- The first completion also warms the page cache for the freshly pulled weights; later requests on
+  the same instance run at normal speed.
 
-Cold starts with a 100 MB+ addon and a 400 MB model are slow; the local CLI remains the better home
-for real inference. Use Vercel for the API surface, the playground, and header-only inspection of
-huge remote models.
+What this means in practice: warm instances stream normally at ~13 tokens/s; a brand new instance
+pays the download plus that first-call warm-up. `/api/ps` shows what is resident, `/api/pull` works as usual — but
+everything in `/tmp` disappears when the instance is recycled, so treat the deployment as a live
+demo rather than storage. For serious models and long contexts, run `lollm serve` locally or in
+Docker.
+

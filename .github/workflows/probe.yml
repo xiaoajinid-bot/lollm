@@ -1,0 +1,46 @@
+name: Probe a deployment
+
+on:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, '[probe]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+      - name: Resolve target URL
+        id: target
+        run: |
+          slug=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-')
+          url="https://lollm-ai-git-${slug}-xiaoajinid-bots-projects.vercel.app"
+          echo "Resolved $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Probe boot and one short completion
+        continue-on-error: true
+        env:
+          BASE_URL: ${{ steps.target.outputs.url }}
+        run: |
+          node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.raw 2> probe.err || true
+          node -e '
+            const fs = require("fs");
+            const raw = fs.existsSync("probe.raw") ? fs.readFileSync("probe.raw", "utf8").trim() : "";
+            const err = fs.existsSync("probe.err") ? fs.readFileSync("probe.err", "utf8").trim() : "";
+            fs.writeFileSync("probe.json", raw ? raw : JSON.stringify({ error: "no stdout", stderr: err }, null, 2));
+          '
+          cat probe.json
+      - name: Publish the probe as a check run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-report.mjs probe.json --name "lollm probe"

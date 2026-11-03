@@ -8,12 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Real llama.cpp inference on Vercel**: the function installs the prebuilt
+  `@node-llama-cpp/linux-x64` binary (`scripts/vercel-prune.mjs` drops the CUDA/Vulkan/arm flavours,
+  ~74 MB instead of ~700 MB), pulls `LOLLM_BOOT_MODEL` (default SmolLM2-360M-Instruct Q4_K_M) into
+  the `/tmp` model store on first use, and serves real completions. `LOLLM_THREADS` defaults to
+  `os.availableParallelism()` because the sandbox advertises the host core count.
+- `GET /api/boot` cold-start diagnostics (backend, home, boot model, CPU/threads, pull errors).
+- `scripts/smoke.mjs` / `scripts/probe.mjs` and the "Smoke test a deployed instance" workflow.
 - **Vercel deployment**: `api/index.mjs` reuses the local router as a serverless handler (no
   listening socket), `vercel.json` wires rewrites, function size/duration and `includeFiles`, and a
   2.4 KB demo GGUF is seeded on a cold store so `/playground` works immediately with the mock
   backend. See [docs/vercel.md](docs/vercel.md).
 - `createHandler()` in `src/server.mjs` — the request handler without the socket, shared by
   `lollm serve` and the serverless entrypoint.
+- `ModelStore.adoptBlobFromFile`: a pull now hashes the staged file and renames it into the blob
+  store instead of copying, so it never holds two copies of the weights (a 258 MB model used to
+  need 516 MB and failed with `ENOSPC` in `/tmp`).
 - `test/vercel.test.mjs` boots the entrypoint against a temporary home and exercises `/`,
   `/api/version`, `/api/tags`, `/playground`, `/api/chat` and `/v1/chat/completions`.
 

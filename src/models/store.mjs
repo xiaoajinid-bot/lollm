@@ -159,6 +159,27 @@ export class ModelStore {
     return { digest: `sha256:${digest}`, size };
   }
 
+  /**
+   * Hash a file we own and adopt it as a blob by *moving* it, instead of copying
+   * it through the staging area. Pulls need this: a 258 MB model would otherwise
+   * need 516 MB of temporary space (staging copy + blob copy), which is more than
+   * a serverless instance has.
+   *
+   * @param {string} sourcePath
+   */
+  async adoptBlobFromFile(sourcePath) {
+    const hash = createHash("sha256");
+    let size = 0;
+    for await (const chunk of createReadStream(sourcePath)) {
+      hash.update(chunk);
+      size += chunk.length;
+    }
+    const digest = hash.digest("hex");
+    const dest = this.blobPath(`sha256:${digest}`);
+    await this.#commitBlob(sourcePath, dest);
+    return { digest: `sha256:${digest}`, size };
+  }
+
   /** @param {string} tmp @param {string} dest */
   async #commitBlob(tmp, dest) {
     try {
@@ -714,7 +735,9 @@ export class ModelStore {
       );
     }
     onProgress({ status: "verifying sha256 digest", total: result.size, completed: result.size });
-    const blob = await this.addBlobFromFile(result.path);
+    // The staging file is ours: adopt it in place so the pull never holds two
+    // copies of the weights on disk.
+    const blob = await this.adoptBlobFromFile(result.path);
     await cleanupResumable(staging);
 
     const modelLayer = { mediaType: MEDIA_TYPES.model, digest: blob.digest, size: blob.size };
