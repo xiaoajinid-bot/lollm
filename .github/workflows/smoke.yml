@@ -42,6 +42,19 @@ jobs:
           fi
           echo "Resolved $url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+      # A push deploys asynchronously: the alias keeps serving the previous build
+      # (or a "deployment not found" page) until the new one is promoted.
+      - name: Wait for the deployment to answer
+        env:
+          BASE_URL: ${{ steps.target.outputs.url }}
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -m 30 -w '%{http_code}' "$BASE_URL/api/version" || true)
+            if [ "$code" = "200" ]; then echo "ready after ~$((i * 10))s"; exit 0; fi
+            echo "attempt $i: HTTP $code"
+            sleep 10
+          done
+          echo "deployment did not become ready"; exit 1
       - name: Smoke test
         id: smoke
         continue-on-error: true
@@ -57,7 +70,10 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/check-report.mjs smoke-report.json --name "lollm smoke report"
+        run: |
+          extra=""
+          if [ "${{ steps.smoke.outcome }}" != "success" ]; then extra="--conclusion failure"; fi
+          node scripts/check-report.mjs smoke-report.json --name "lollm smoke report" $extra
 
       - name: Fail when a check failed
         if: steps.smoke.outcome != 'success'
