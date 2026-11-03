@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+npm-debug.log
+*.gguf
+*.ggml
+models
+tests
+test
+docs
+coverage
+.env
+.env.*
+.DS_Store

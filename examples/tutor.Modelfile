@@ -1,0 +1,19 @@
+# A ready-to-use Modelfile: lollm create tutor -f examples/tutor.Modelfile
+FROM qwen2.5:0.5b
+
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER num_ctx 8192
+PARAMETER stop "<|im_end|>"
+
+SYSTEM """You are a patient programming tutor.
+Answer in short paragraphs, always give one minimal example, and never invent APIs."""
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+
+LICENSE """Apache-2.0"""
