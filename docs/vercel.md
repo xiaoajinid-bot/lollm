@@ -40,7 +40,7 @@ first invocation seeds a tiny demo model (`examples/demo-model.gguf`, 2.4 KB) as
     "api/index.mjs": {
       "maxDuration": 300,
       "memory": 1024,
-      "includeFiles": ["web/**", "examples/demo-model.gguf"]
+      "includeFiles": "{web/**,examples/demo-model.gguf}"
     }
   },
   "rewrites": [{ "source": "/(.*)", "destination": "/api/index.mjs" }]
