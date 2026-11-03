@@ -36,7 +36,7 @@ jobs:
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({
-                  model: process.argv[1] ?? "smollm2:360m",
+                  model: "smollm2:360m",
                   messages: [{ role: "user", content: "Hi" }],
                   stream: false,
                   options: { num_predict: 16 },
@@ -51,7 +51,7 @@ jobs:
             const report = { base, bootMs, boot, chatMs: Date.now() - t1, chat };
             fs.writeFileSync("probe.json", JSON.stringify(report, null, 2));
             console.log(JSON.stringify(report, null, 2));
-          ' "${{ inputs.model }}"
+          '
       - name: Publish the probe as a check run
         if: always()
         env:
