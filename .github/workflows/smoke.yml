@@ -39,4 +39,15 @@ jobs:
         env:
           BASE_URL: ${{ steps.target.outputs.url }}
           MODEL: ${{ inputs.model }}
-        run: node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000
+        run: |
+          status=0
+          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 120000 --json > smoke-report.json || status=$?
+          cat smoke-report.json
+          exit $status
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: smoke-report.json
+          if-no-files-found: ignore
