@@ -6,6 +6,7 @@ package-lock.json.bak
 /.lollm/
 /models/
 *.gguf
+!examples/demo-model.gguf
 *.ggml
 *.safetensors
 

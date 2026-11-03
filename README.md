@@ -381,7 +381,7 @@ with timing fields. The engine keeps exactly one hot model by default, unloads i
 ## Testing
 
 ```bash
-npm test          # 110 tests, no model download, no GPU, no network
+npm test          # 111 tests, no model download, no GPU, no network
 npm run check     # syntax check every module
 ```
 
@@ -394,7 +394,21 @@ and template rendering. Nothing leaves loopback.
 Real-inference smoke tests are intentionally not in CI: they need multi-hundred-megabyte weights.
 Run `lollm serve` locally and use `/playground` instead.
 
-## Docker
+## Deploy
+
+**Vercel** — the same API and playground run as a serverless function:
+
+```bash
+npx vercel link --project lollm-ai
+npx vercel deploy --prod
+```
+
+`api/index.mjs` hands requests to the local router, so `/api/*`, `/v1/*`, streaming and
+`/playground` work unchanged; the mock backend keeps the hosted demo alive without native weights,
+and a tiny demo model is seeded on first boot. Real llama.cpp inference on Vercel needs the native
+binding and a model in `/tmp` — details and limits in [docs/vercel.md](docs/vercel.md).
+
+**Docker**
 
 ```bash
 docker build -t lollm .

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm ci --omit=optional --ignore-scripts --no-audit --no-fund",
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300,
+      "memory": 1024,
+      "includeFiles": ["web/**", "examples/demo-model.gguf"]
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index.mjs" }]
+}
