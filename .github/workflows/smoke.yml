@@ -5,18 +5,17 @@ on:
     inputs:
       url:
         description: Base URL of a running lollm instance
-        required: true
+        required: false
         default: https://lollm-ai-pied.vercel.app
       model:
-        description: Model to chat with (default: first in /api/tags)
+        description: Model to chat with (default: first one in /api/tags)
         required: false
   push:
     branches: ["**"]
-    # Only run when the commit says so, so ordinary pushes stay fast.
-    tags-ignore: ["**"]
 
 jobs:
   smoke:
+    # Run on demand, or from a commit message containing [smoke].
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[smoke]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -24,11 +23,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: "22.x"
+      - name: Resolve target URL
+        id: target
+        run: |
+          url="${{ inputs.url }}"
+          if [ -z "$url" ]; then url="${{ vars.LOLLM_SMOKE_URL }}"; fi
+          if [ -z "$url" ]; then
+            slug=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-')
+            url="https://lollm-ai-git-${slug}-xiaoajinid-bots-projects.vercel.app"
+          fi
+          echo "Resolved $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Smoke test
         env:
-          # Explicit input > repository variable > the deployment alias of the pushed branch.
-          BASE_URL: ${{ inputs.url || vars.LOLLM_SMOKE_URL || format('https://lollm-ai-git-{0}-xiaoajinid-bots-projects.vercel.app', replace(github.ref_name, '/', '-')) }}
+          BASE_URL: ${{ steps.target.outputs.url }}
           MODEL: ${{ inputs.model }}
-        run: |
-          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000
+        run: node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000
