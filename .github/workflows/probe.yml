@@ -23,17 +23,12 @@ jobs:
         env:
           BASE_URL: https://lollm-ai-git-${{ github.ref_name }}-xiaoajinid-bots-projects.vercel.app
         run: |
-          status=0
-          node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.json || status=$?
+          node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.json || true
+          test -s probe.json || echo '{"error":"probe produced no report"}' > probe.json
           cat probe.json
-          exit $status
       - name: Publish the probe as a check run
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          summary=$(cat probe.json 2>/dev/null || echo "no report")
-          gh api repos/$GITHUB_REPOSITORY/check-runs \
-            -f name="lollm probe" -f head_sha=$GITHUB_SHA \
-            -f status=completed -f conclusion=success \
-            -f "output[title]=Probe" -f "output[summary]=$summary" > /dev/null
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-report.mjs probe.json --name "lollm probe"
