@@ -120,9 +120,25 @@ The hosted instance runs genuine llama.cpp inference, not the mock backend:
   Set `LOLLM_BOOT_MODEL=0` to skip the boot pull, or point it at any `hf:`, `https://` or `file:`
   reference. `Qwen2.5-0.5B-Instruct q2_k` (415 MB) is the largest that still fits comfortably.
 
-What this means in practice: the first request after a cold start pays the download (~5–15 s on
-Vercel's network) plus the model load (~1–2 s); warm instances stream normally at tens of tokens per
-second on the 2-core function. `/api/ps` shows what is resident, `/api/pull` works as usual — but
+Measured on the `lollm-ai` Hobby deployment (2 vCPU):
+
+| Phase | Time |
+|---|---|
+| cold boot: pull 258 MB + hash + manifest | ~4–6 s |
+| first completion on a fresh instance (cold file cache) | ~90 s |
+| second completion on the same instance | ~1.3 s of generation for 16 tokens (~13 tok/s) |
+| model load per request buffer | ~1.8 s |
+
+Two things matter for that second row:
+
+- `scripts/vercel-prune.mjs` keeps only the linux-x64 binary, and the adapter caps `LOLLM_THREADS`
+  at `os.availableParallelism()` (max 4). A sandbox reports the host's core count (64+), and letting
+  llama.cpp spawn that many workers on 2 vCPUs drops generation to ~0.1 tok/s.
+- The first completion also warms the page cache for the freshly pulled weights; later requests on
+  the same instance run at normal speed.
+
+What this means in practice: warm instances stream normally at ~13 tokens/s; a brand new instance
+pays the download plus that first-call warm-up. `/api/ps` shows what is resident, `/api/pull` works as usual — but
 everything in `/tmp` disappears when the instance is recycled, so treat the deployment as a live
 demo rather than storage. For serious models and long contexts, run `lollm serve` locally or in
 Docker.
