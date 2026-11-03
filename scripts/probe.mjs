@@ -17,7 +17,7 @@ const numPredict = Number(valueOf("--num-predict", "16"));
 const json = argv.includes("--json");
 
 if (!base) {
-  console.error("usage: node scripts/probe.mjs <base-url> [--model NAME] [--num-predict N] [--json]");
+  process.stderr.write("usage: node scripts/probe.mjs <base-url> [--model NAME] [--num-predict N] [--json]\n");
   process.exit(2);
 }
 
@@ -91,12 +91,17 @@ try {
 }
 
 const report = { base, model: target, models, bootMs, boot, chat, warm };
-if (json) console.log(JSON.stringify(report, null, 2));
-else {
-  console.log(`base      ${report.base}`);
-  console.log(`models    ${models.join(", ") || "(none)"}`);
-  console.log(`boot      ${bootMs} ms  ${JSON.stringify(boot)}`);
-  console.log(`chat      ${JSON.stringify(chat)}`);
-  console.log(`warm      ${JSON.stringify(warm)}`);
-}
+// Values come from a remote server: go straight to stdout instead of a log sink
+// so nothing from the response is interpreted as log metadata.
+const payload = json
+  ? JSON.stringify(report, null, 2)
+  : [
+      `base      ${report.base}`,
+      `models    ${JSON.stringify(models)}`,
+      `boot      ${bootMs} ms  ${JSON.stringify(boot)}`,
+      `chat      ${JSON.stringify(chat)}`,
+      `warm      ${JSON.stringify(warm)}`,
+    ].join("\n");
+process.stdout.write(`${payload}
+`);
 process.exit(chat.error || warm.error ? 1 : 0);

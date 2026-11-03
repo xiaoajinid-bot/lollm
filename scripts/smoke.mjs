@@ -21,7 +21,7 @@ const timeout = timeoutIndex >= 0 ? Number(argv[timeoutIndex + 1]) : 240_000;
 const json = argv.includes("--json");
 
 if (!base) {
-  console.error("usage: node scripts/smoke.mjs <base-url> [--model NAME] [--timeout MS] [--json]");
+  process.stderr.write("usage: node scripts/smoke.mjs <base-url> [--model NAME] [--timeout MS] [--json]\n");
   process.exit(2);
 }
 
@@ -145,12 +145,15 @@ await check("POST /v1/chat/completions", async () => {
 });
 
 const failed = results.filter((result) => !result.ok);
-if (json) {
-  console.log(JSON.stringify({ base, model, results }, null, 2));
-} else {
-  for (const result of results) {
-    console.log(`${result.ok ? "PASS" : "FAIL"}  ${result.name}  ${result.ms}ms  ${result.detail}`);
-  }
-  console.log(failed.length === 0 ? "\nall checks passed" : `\n${failed.length} check(s) failed`);
-}
+// Details come from a remote server, so they go to stdout as data rather than
+// through a log sink that could interpret them.
+const text = json
+  ? JSON.stringify({ base, model, results }, null, 2)
+  : [
+      ...results.map(
+        (result) => `${result.ok ? "PASS" : "FAIL"}  ${result.name}  ${result.ms}ms  ${result.detail}`,
+      ),
+      failed.length === 0 ? "\nall checks passed" : `\n${failed.length} check(s) failed`,
+    ].join("\n");
+process.stdout.write(`${text}\n`);
 process.exit(failed.length === 0 ? 0 : 1);

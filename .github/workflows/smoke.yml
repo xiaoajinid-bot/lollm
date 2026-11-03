@@ -30,9 +30,12 @@ jobs:
           node-version: "22.x"
       - name: Resolve target URL
         id: target
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          VAR_URL: ${{ vars.LOLLM_SMOKE_URL }}
         run: |
-          url="${{ inputs.url }}"
-          if [ -z "$url" ]; then url="${{ vars.LOLLM_SMOKE_URL }}"; fi
+          url="$INPUT_URL"
+          if [ -z "$url" ]; then url="$VAR_URL"; fi
           if [ -z "$url" ]; then
             slug=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-')
             url="https://lollm-ai-git-${slug}-xiaoajinid-bots-projects.vercel.app"
