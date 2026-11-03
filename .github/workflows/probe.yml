@@ -1,0 +1,64 @@
+name: Probe a deployment
+
+on:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  probe:
+    if: contains(github.event.head_commit.message, '[probe]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+      - name: Probe boot and one short completion
+        continue-on-error: true
+        env:
+          BASE_URL: https://lollm-ai-git-${{ github.ref_name }}-xiaoajinid-bots-projects.vercel.app
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const base = process.env.BASE_URL;
+            const started = Date.now();
+            const boot = await (await fetch(`${base}/api/boot?t=${Date.now()}`)).json();
+            const bootMs = Date.now() - started;
+            const t1 = Date.now();
+            let chat = {};
+            try {
+              const response = await fetch(`${base}/api/chat`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  model: process.argv[1] ?? "smollm2:360m",
+                  messages: [{ role: "user", content: "Hi" }],
+                  stream: false,
+                  options: { num_predict: 16 },
+                }),
+                signal: AbortSignal.timeout(280000),
+              });
+              const body = await response.json();
+              chat = { status: response.status, content: body.message?.content, evalCount: body.eval_count, totalMs: body.total_duration, error: body.error };
+            } catch (error) {
+              chat = { error: String(error?.message ?? error) };
+            }
+            const report = { base, bootMs, boot, chatMs: Date.now() - t1, chat };
+            fs.writeFileSync("probe.json", JSON.stringify(report, null, 2));
+            console.log(JSON.stringify(report, null, 2));
+          ' "${{ inputs.model }}"
+      - name: Publish the probe as a check run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          summary=$(cat probe.json 2>/dev/null || echo "no report")
+          gh api repos/$GITHUB_REPOSITORY/check-runs \
+            -f name="lollm probe" -f head_sha=$GITHUB_SHA \
+            -f status=completed -f conclusion=success \
+            -f "output[title]=Probe" -f "output[summary]=$summary" > /dev/null
