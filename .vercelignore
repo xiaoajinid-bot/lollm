@@ -1,0 +1,11 @@
+# Files Vercel does not need in the function bundle.
+.github/
+test/
+docs/
+node_modules/
+.git/
+CHANGELOG.md
+Dockerfile
+.dockerignore
+examples/*
+!examples/demo-model.gguf
