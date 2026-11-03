@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -35,7 +39,25 @@ jobs:
         run: npm run check
 
       - name: Test
-        run: npm test
+        id: test
+        continue-on-error: true
+        run: |
+          status=0
+          npm test > test-output.txt 2>&1 || status=$?
+          cat test-output.txt
+          exit $status
+
+      # Job logs are not always reachable; publish the failing output as a check
+      # run so the failure is readable from the API too.
+      - name: Publish failing test output
+        if: always() && steps.test.outcome != 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-report.mjs test-output.txt --name "test output (Node ${{ matrix.node }})" --conclusion failure
+
+      - name: Fail when tests failed
+        if: steps.test.outcome != 'success'
+        run: exit 1
 
   package:
     name: Package sanity
