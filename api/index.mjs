@@ -103,6 +103,10 @@ const boot = {
   home: "",
   model: /** @type {string | undefined} */ (undefined),
   error: /** @type {string | undefined} */ (undefined),
+  threads: "",
+  cpus: 0,
+  parallel: 0,
+  totalMemMb: 0,
 };
 
 async function start() {
@@ -110,6 +114,16 @@ async function start() {
   boot.startedAt = Date.now();
   boot.home = home;
   boot.backend = process.env.LOLLM_BACKEND ?? "mock";
+  boot.cpus = os.cpus().length;
+  boot.parallel = os.availableParallelism?.() ?? 0;
+  boot.totalMemMb = Math.round(os.totalmem() / 1e6);
+  // A sandbox reports the *host* core count (often 64+), and llama.cpp happily
+  // spawns that many workers on the two vCPUs it actually gets, which collapses
+  // generation to a crawl. Cap the default at the CPU quota we can really use.
+  if (!process.env.LOLLM_THREADS && process.env.LOLLM_BACKEND === "llama") {
+    process.env.LOLLM_THREADS = String(Math.min(4, Math.max(1, boot.parallel || 2)));
+  }
+  boot.threads = process.env.LOLLM_THREADS ?? "auto";
   const instance = await createInstance({
     home,
     backend: process.env.LOLLM_BACKEND ?? "mock",
