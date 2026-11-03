@@ -404,9 +404,10 @@ npx vercel deploy --prod
 ```
 
 `api/index.mjs` hands requests to the local router, so `/api/*`, `/v1/*`, streaming and
-`/playground` work unchanged; the mock backend keeps the hosted demo alive without native weights,
-and a tiny demo model is seeded on first boot. Real llama.cpp inference on Vercel needs the native
-binding and a model in `/tmp` — details and limits in [docs/vercel.md](docs/vercel.md).
+`/playground` work unchanged, and llama.cpp runs inside the function: a small GGUF
+(`LOLLM_BOOT_MODEL`, default SmolLM2-360M-Instruct Q4_K_M) is pulled into the `/tmp` model store on
+first use. Expect ~4 s of cold boot, a slow first completion while the weights warm up, then
+~10 tokens/s. Details, limits and the real-model knobs are in [docs/vercel.md](docs/vercel.md).
 
 **Docker**
 
