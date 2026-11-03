@@ -188,9 +188,10 @@ npx vercel deploy --prod
 ```
 
 `api/index.mjs` meneruskan request ke router lokal, jadi `/api/*`, `/v1/*`, streaming, dan
-`/playground` tetap sama. Backend `mock` dipakai default di Vercel (tanpa binding native) dan satu
-model demo kecil otomatis dibuat saat boot. Inference llama.cpp asli butuh binding native + model di
-`/tmp` — lihat [docs/vercel.md](docs/vercel.md).
+`/playground` tetap sama, dan llama.cpp benar-benar jalan di dalam function: GGUF kecil
+(`LOLLM_BOOT_MODEL`, default SmolLM2-360M-Instruct Q4_K_M) diunduh ke penyimpanan `/tmp` saat
+pertama dipakai. Cold boot ~4 detik, completion pertama lambat selagi bobot dipanaskan, lalu
+sekitar ~10 token/detik. Detail dan batasannya ada di [docs/vercel.md](docs/vercel.md).
 
 ## Modelfile
 
