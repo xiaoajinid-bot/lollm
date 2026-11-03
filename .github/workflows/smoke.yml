@@ -1,0 +1,33 @@
+name: Smoke test a deployed instance
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Base URL of a running lollm instance
+        required: true
+        default: https://lollm-ai-pied.vercel.app
+      model:
+        description: Model to chat with (default: first in /api/tags)
+        required: false
+  push:
+    branches: ["**"]
+    # Only run when the commit says so, so ordinary pushes stay fast.
+    tags-ignore: ["**"]
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[smoke]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Smoke test
+        env:
+          BASE_URL: ${{ inputs.url || vars.LOLLM_SMOKE_URL || 'https://lollm-ai-pied.vercel.app' }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000
