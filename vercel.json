@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "installCommand": "npm ci --omit=optional --ignore-scripts --no-audit --no-fund",
   "functions": {
     "api/index.mjs": {
@@ -8,5 +9,10 @@
       "includeFiles": "{web/**,examples/demo-model.gguf}"
     }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index.mjs" }]
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.mjs"
+    }
+  ]
 }
