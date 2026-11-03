@@ -90,8 +90,26 @@ async function resolveHome() {
 /** @type {Promise<(req: any, res: any) => Promise<void>> | undefined} */
 let ready;
 
-async function boot() {
+/**
+ * Visibility for the cold start: `GET /api/boot` answers with what the function
+ * is actually running, so a failed pull or a missing native binding can be seen
+ * without opening the platform log viewer.
+ */
+const boot = {
+  status: /** @type {"pending" | "ready" | "error"} */ ("pending"),
+  startedAt: 0,
+  ms: 0,
+  backend: "",
+  home: "",
+  model: /** @type {string | undefined} */ (undefined),
+  error: /** @type {string | undefined} */ (undefined),
+};
+
+async function start() {
   const home = await resolveHome();
+  boot.startedAt = Date.now();
+  boot.home = home;
+  boot.backend = process.env.LOLLM_BACKEND ?? "mock";
   const instance = await createInstance({
     home,
     backend: process.env.LOLLM_BACKEND ?? "mock",
@@ -101,10 +119,16 @@ async function boot() {
   if (process.env.LOLLM_BACKEND !== "llama") {
     await seedDemoModel(instance.store).catch(() => {});
   } else {
-    await ensureBootModel(instance).catch((error) => {
-      instance.logger.warn(`boot model unavailable: ${String(/** @type {Error} */ (error)?.message ?? error)}`);
-    });
+    try {
+      boot.model = await ensureBootModel(instance);
+    } catch (error) {
+      const message = String(/** @type {Error} */ (error)?.message ?? error);
+      boot.error = message;
+      instance.logger.warn(`boot model unavailable: ${message}`);
+    }
   }
+  boot.status = boot.error ? "error" : "ready";
+  boot.ms = Date.now() - boot.startedAt;
   return createHandler({
     config: instance.config,
     store: instance.store,
@@ -118,19 +142,30 @@ async function boot() {
  * @param {import("node:http").ServerResponse} res
  */
 export default async function handler(req, res) {
-  ready ??= boot();
+  ready ??= start();
   let handle;
   try {
     handle = await ready;
   } catch (error) {
     // Never retry a broken boot on every request; report it once, clearly.
     ready = undefined;
+    boot.status = "error";
+    boot.error = String(/** @type {Error} */ (error)?.message ?? error);
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     const message = `lollm failed to start: ${String(/** @type {Error} */ (error)?.message ?? error)}`;
     res.end(JSON.stringify({ error: message }));
     return;
   }
+
+  // Diagnostics for the cold start (model download, backend, temp dir).
+  if ((req.url ?? "").split("?")[0] === "/api/boot") {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify({ ...boot, uptimeMs: boot.startedAt ? Date.now() - boot.startedAt : 0 }));
+    return;
+  }
+
   await handle(req, res);
 }
 
