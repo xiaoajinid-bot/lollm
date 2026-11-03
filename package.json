@@ -1,21 +1,58 @@
 {
-  "name": "vercel-local-llm",
-  "version": "1.1.0",
-  "description": "Server-side Local LLM (llama.cpp GGUF CPU inference) on Vercel Serverless with OpenAI & Ollama compatible public API, tool calling / connectors, and Web Chat UI",
-  "private": true,
+  "name": "lollm",
+  "version": "0.2.0",
+  "description": "Ollama-compatible local LLM server for Node.js, powered by llama.cpp via node-llama-cpp. OpenAI-compatible API included.",
+  "keywords": [
+    "llm",
+    "llama.cpp",
+    "ollama",
+    "gguf",
+    "node-llama-cpp",
+    "openai",
+    "local-llm",
+    "inference",
+    "server"
+  ],
+  "homepage": "https://github.com/xiaoajinid-bot/lollm#readme",
+  "bugs": {
+    "url": "https://github.com/xiaoajinid-bot/lollm/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoajinid-bot/lollm.git"
+  },
+  "author": "xiaoajinid-bot",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
   },
-  "scripts": {
-    "start": "node scripts/dev-server.mjs",
-    "dev": "node scripts/dev-server.mjs",
-    "build": "node -e \"console.log('Static public/index.html + Serverless api/llm.mjs ready')\"",
-    "test": "node --test tests/*.test.mjs",
-    "test:ui": "node tests/ui/functional.mjs"
+  "bin": {
+    "lollm": "bin/lollm.mjs"
   },
-  "dependencies": {
-    "@node-llama-cpp/linux-x64": "3.22.2",
-    "node-llama-cpp": "3.22.2"
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/lollm.mjs serve",
+    "serve": "node bin/lollm.mjs serve",
+    "dev": "node --watch bin/lollm.mjs serve --verbose",
+    "test": "node --test --test-timeout=60000 test/*.test.mjs",
+    "test:watch": "node --test --watch test/*.test.mjs",
+    "check": "node --check bin/lollm.mjs && for f in $(find src test scripts -name '*.mjs'); do node --check \"$f\" || exit 1; done",
+    "verify:remote": "node scripts/verify-remote.mjs"
+  },
+  "optionalDependencies": {
+    "node-llama-cpp": "^3.22.2"
   }
 }

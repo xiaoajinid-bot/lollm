@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # The native llama.cpp binding is optional: the test suite runs against the
+      # deterministic mock backend, so CI stays fast and never downloads weights.
+      - name: Install
+        run: npm ci --omit=optional --ignore-scripts --no-audit --no-fund
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+  package:
+    name: Package sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --omit=optional --ignore-scripts --no-audit --no-fund
+      - name: npm pack
+        run: npm pack --dry-run
+      - name: CLI help boots
+        run: node bin/lollm.mjs --help

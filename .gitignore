@@ -1,13 +1,32 @@
-# v0 runtime files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
+# dependencies
+node_modules/
+package-lock.json.bak
 
-# Common ignores
-node_modules
-.next/
-.env*.local
-.DS_Store
-# Secrets lokal (aman untuk kredensial; .env sendiri hanya berisi kunci + default)
+# runtime data (models are big; keep them out of git)
+/.lollm/
+/models/
+*.gguf
+*.ggml
+*.safetensors
+
+# logs & temp
+*.log
+/tmp/
+/.tmp/
+/coverage/
+
+# env
+.env
 .env.local
 .env.*.local
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# node-llama-cpp local builds
+/.node-llama-cpp/
+/llama/

@@ -1,8 +1,0 @@
-node_modules
-scripts
-.git
-*.zip
-.DS_Store
-.env*
-
-tests

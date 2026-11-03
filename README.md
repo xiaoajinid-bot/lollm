@@ -1,728 +1,432 @@
-# Vercel Local LLM (`lokal-llm.vercel.app`)
+<div align="center">
 
-Aplikasi **Server-side Local LLM** yang menjalankan model open-source `GGUF` (`Qwen2.5-0.5B-Instruct`, `SmolLM2-360M-Instruct`, `SmolLM2-135M-Instruct`) secara langsung di **CPU Vercel Serverless Function (Fluid Compute)** menggunakan `node-llama-cpp` (`llama.cpp` SIMD x86_64) — **100% tanpa API key eksternal** — lengkap dengan **Web Chat UI** serta **OpenAI & Ollama Compatible Public API**.
+# lollm
 
----
+**Ollama-compatible local LLM server for Node.js, powered by llama.cpp.**
 
-## Status Project Vercel Anda
+Run GGUF models on your own machine, expose the same API your Ollama tooling already speaks,
+and keep everything in the Node ecosystem — one process, no Python, no daemon, no API keys.
 
-Project Vercel telah dibuat dan dikonfigurasi pada akun/tim Anda (`lnksys1`):
+`npx lollm serve` → `http://127.0.0.1:11434`
 
-- **Nama Project**: `lokal-llm`
-- **Project ID**: `prj_ngpyhJbAGvoBxpPo1eJah3obpsUr`
-- **Public Production Domain**: `https://lokal-llm.vercel.app` *(Verified & bebas proteksi SSO saat di-deploy ke Production)*
-- **Environment Variables Terpasang**:
-  - `NODE_LLAMA_CPP_SKIP_DOWNLOAD=true`
-  - `NODE_LLAMA_CPP_POSTINSTALL=skip`
-  - `NODE_LLAMA_CPP_GPU=false`
-- **Fluid Compute Timeout**: `300` detik (`maxDuration: "max"`)
+[![CI](https://github.com/xiaoajinid-bot/lollm/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaoajinid-bot/lollm/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-63e6be.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-7c9cff.svg)](package.json)
+
+</div>
 
 ---
 
-## Cara Deploy ke Domain Publik `https://lokal-llm.vercel.app`
+## Why another local LLM server?
 
-> **Catatan**: Upload kode mentah langsung lewat API konektor diblokir oleh filter keamanan (*security filter/WAF*) penyedia konektor karena payload berisi berkas kode/HTML aplikasi. Project & domain publik Anda sudah siap di Vercel — cukup jalankan salah satu dari dua cara berikut untuk mempublikasikan kodenya ke **Production**:
+Ollama is great, but it is a Go daemon with its own model registry, its own Modelfile dialect and
+its own API. If your stack is JavaScript/TypeScript, you usually end up gluing a Go binary to a Node
+process and hoping the versions match.
 
-### Opsi A — Deploy Langsung via Vercel CLI (Paling Cepat)
+`lollm` flips that around:
 
-1. Unduh arsip `lokal-llm-vercel.zip` dari workspace ini lalu ekstrak di komputer Anda:
-   ```bash
-   unzip lokal-llm-vercel.zip -d vercel-local-llm
-   cd vercel-local-llm
-   ```
-2. Hubungkan ke project `lokal-llm` yang sudah dibuat & deploy ke **Production** (`--prod` wajib agar masuk ke domain publik `lokal-llm.vercel.app` tanpa terhalang Vercel Authentication/SSO):
-   ```bash
-   npx vercel link --project lokal-llm --yes
-   npx vercel --prod
-   ```
+- **Ollama's HTTP API** (`/api/chat`, `/api/generate`, `/api/tags`, `/api/pull`, …) so existing
+  clients — Open WebUI, Continue, LangChain, `ollama-js` — keep working.
+- **OpenAI's API** (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`) so SDKs and
+  AI frameworks work without a proxy.
+- **Ollama's on-disk model store** (`~/.lollm/models/{blobs,manifests}`) with content-addressed
+  layers, so `lollm pull` can fetch straight from `registry.ollama.ai`, Hugging Face, any URL, or
+  a local `.gguf` file.
+- **llama.cpp underneath** through [`node-llama-cpp`](https://github.com/withcatai/node-llama-cpp) —
+  the same SIMD/GPU inference engine, just bound to Node.
+- **A built-in playground** at `/playground`, and a CLI that feels like `ollama`'s.
 
-### Opsi B — Via GitHub Repository (Auto-Deploy)
+Everything is a normal ESM package with **zero runtime dependencies** other than the llama.cpp
+binding (which is optional, so `npm install` never fails on exotic platforms).
 
-1. Push folder `vercel-local-llm` ke repository GitHub Anda.
-2. Buka dashboard Vercel → pilih project **`lokal-llm`** → **Settings → Git** → hubungkan repository GitHub tersebut. Setiap push ke branch `main` akan otomatis ter-deploy ke **`https://lokal-llm.vercel.app`**.
+## Features
 
----
-
-## Endpoint Public Domain (`https://lokal-llm.vercel.app`)
-
-Seluruh endpoint sudah dilengkapi header `Access-Control-Allow-Origin: *` sehingga dapat diakses publik dari browser, `curl`, SDK OpenAI, maupun aplikasi eksternal:
-
-| Method | Endpoint | Deskripsi |
-|---|---|---|
-| `GET` | `/` | Web Chat UI (tab Chat + tab Model Store) |
-| `GET` | `/api/health` | Status container (`warm`/`cold`), penggunaan RAM (`RSS`), & sisa ruang `/tmp` |
-| `POST` | `/api/warmup` | Preload model GGUF ke RAM container |
-| `GET` | `/v1/models` | Daftar model kompatibel OpenAI SDK |
-| `POST` | `/v1/chat/completions` | Chat Completions OpenAI (`stream: true` SSE & `stream: false` JSON) |
-| `POST` | `/v1/responses` | Responses API OpenAI (`input`, `instructions`, `tools`, `stream`) |
-| `GET` | `/v1/responses/{id}` | Ambil ulang respons dari cache instance (best-effort) |
-| `DELETE` | `/v1/responses/{id}` | Hapus respons dari cache instance |
-| `GET` | `/api/storage` | Konfigurasi sumber model (S3 / Blob / base URL) tanpa membocorkan secret |
-| `GET` | `/api/storage/check` | Verifikasi objek GGUF benar-benar ada di storage (Range 1 byte) |
-| `GET` | `/api/store` | Katalog model GGUF + isi bucket (mana yang sudah tersimpan) |
-| `POST` | `/api/store/save` | Salin model dari katalog ke storage (`{ model, force? }`) |
-| `POST` | `/api/store/delete` | Hapus objek model dari storage (`{ key }`) |
-| `GET` | `/api/tags` | Daftar model kompatibel Ollama |
-| `POST` | `/api/generate` | Endpoint generasi kompatibel Ollama |
-
-### Contoh Pemanggilan Public API (`curl`)
-
-```bash
-curl -s https://lokal-llm.vercel.app/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "qwen2.5-0.5b-instruct",
-    "messages": [
-      {"role": "user", "content": "Halo! Jelaskan singkat keuntungan Local LLM."}
-    ],
-    "temperature": 0.65,
-    "max_tokens": 2048
-  }'
-```
-
-### Contoh Pemanggilan via Python (`openai` SDK)
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://lokal-llm.vercel.app/v1",
-    api_key="local-no-key-required",
-)
-
-resp = client.chat.completions.create(
-    model="qwen2.5-0.5b-instruct",
-    messages=[{"role": "user", "content": "Buatkan fungsi faktorial dalam Python."}],
-    stream=True,
-)
-
-for chunk in resp:
-    print(chunk.choices[0].delta.content or "", end="", flush=True)
-```
-
-### Contoh Pemanggilan Responses API
-
-`POST /v1/responses` melayani format baru OpenAI (dipakai `client.responses.create()`
-di SDK Python/JS). Alias: `/api/responses` dan `/responses`.
-
-```python
-from openai import OpenAI
-
-client = OpenAI(base_url="https://lokal-llm.vercel.app/v1", api_key="local-no-key-required")
-
-resp = client.responses.create(
-    model="qwen2.5-0.5b-instruct",
-    instructions="Jawab dalam bahasa Indonesia.",
-    input="Tulis fungsi Python untuk membaca CSV besar per potongan.",
-    max_output_tokens=4096,
-)
-print(resp.output_text)
-print(resp.usage.input_tokens, resp.usage.output_tokens)
-```
-
-Streaming:
-
-```python
-stream = client.responses.create(
-    model="qwen2.5-0.5b-instruct",
-    input="Jelaskan cara kerja llama.cpp.",
-    stream=True,
-)
-for event in stream:
-    if event.type == "response.output_text.delta":
-        print(event.delta, end="", flush=True)
-```
-
-Yang didukung:
-
-| Bagian | Dukungan |
+| | |
 |---|---|
-| `input` | string, item `{role, content}`, part `input_text`/`output_text` |
-| `instructions` | dikirim sebagai system prompt (kebijakan tool server tetap menempel) |
-| `tools` / `tool_choice` | tool `{type:"function", name, parameters}` dikonversi ke format chat; tool milik client dikembalikan sebagai item `function_call` |
-| `max_output_tokens`, `temperature`, `top_p` | diteruskan ke engine (tetap di-clamp batas konteks) |
-| `stream: true` | event SSE: `response.created`, `response.output_text.delta`, `response.function_call_arguments.delta`, `response.completed`, `error` |
-| `previous_response_id` | disambung dari cache memori instance (best-effort) |
-| `metadata`, `store` | `metadata` di-echo; `store: false` mematikan cache |
-| `text.format`, `reasoning`, tool bawaan (`web_search`, `file_search`, dll.) | belum didukung — diabaikan, nama tool-nya dilaporkan di `unsupported_tools` |
+| **Backends** | llama.cpp via `node-llama-cpp` (CPU, Metal, CUDA, Vulkan) and a deterministic `mock` backend for CI |
+| **Model formats** | GGUF (v1–v3), including split-file metadata and per-model chat templates |
+| **Model sources** | `registry.ollama.ai`, Hugging Face (`hf:`), direct `https://` URLs, local `.gguf` paths, Modelfiles |
+| **On-demand models** | GGUF headers read over HTTP `Range` requests (256 KB block cache), tensor slices fetched only when read, resumable downloads |
+| **No hidden limits** | No token cap, no context clamp, no body-size cap unless you ask for one (`--max-tokens`, `--context-size`, `--max-body-bytes`) |
+| **Native API** | `/api/version`, `/api/tags`, `/api/ps`, `/api/show`, `/api/chat`, `/api/generate`, `/api/embed`, `/api/embeddings`, `/api/pull`, `/api/create`, `/api/copy`, `/api/delete` |
+| **OpenAI API** | `/v1/models`, `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings` (streaming, tools, JSON mode) |
+| **Streaming** | NDJSON (Ollama) and SSE (OpenAI), with backpressure and client-disconnect aborts |
+| **Sampling** | temperature, top_p, top_k, min_p, repeat/presence/frequency penalties, seed, stop sequences, `num_ctx`, `num_gpu` |
+| **Structured output** | `format: "json"`, JSON Schema grammars, OpenAI `response_format` |
+| **Tool calling** | Ollama/OpenAI tool schemas mapped to llama.cpp GBNF function-call grammars |
+| **Model lifecycle** | keep-alive, idle eviction, LRU replacement, concurrency limits, queueing |
+| **Ops** | CORS, request IDs, `/api/health`, graceful shutdown, Dockerfile, zero-dep tests |
 
-### Tanpa API key (endpoint selalu terbuka)
-
-Semua endpoint publik bersifat **tanpa autentikasi**: server tidak memeriksa
-`Authorization`, `x-api-key`, maupun parameter `api_key`. Artinya:
-
-- Klien **tetap wajib** mengirim API key bila SDK-nya menuntut (OpenAI SDK, Codex CLI),
-  tetapi **nilainya bebas** — `sk-apa-saja`, `local-no-key-required`, atau string acak.
-- Request tanpa header auth sama sekali juga dilayani (`/v1/chat/completions`,
-  `/v1/responses`, `/api/*`).
-- CORS terbuka (`Access-Control-Allow-Origin: *`) dan `OPTIONS` preflight dijawab `204`,
-  jadi bisa dipanggil langsung dari browser aplikasi lain.
-- `Cache-Control: no-store` pada semua respons JSON API.
-
-Jangan taruh data rahasia pada prompt bila memakai deployment publik: siapa pun yang
-tahu URL-nya bisa memakai model dan tool yang sama.
-
-### Memakai Codex CLI ke endpoint ini
-
-Codex CLI (`codex exec`) berbicara lewat **Responses API** (`wire_api = "responses"`),
-jadi bisa diarahkan ke deployment ini. Contoh `~/.codex/config.toml`:
-
-```toml
-model = "qwen2.5-0.5b-instruct"
-model_provider = "lollm"
-
-[model_providers.lollm]
-name = "lollm"
-base_url = "https://lollm-psi.vercel.app/v1"
-env_key = "LOLLM_API_KEY"
-wire_api = "responses"
-```
+## Quick start
 
 ```bash
-export LOLLM_API_KEY=nilai-bebas-apa-saja      # server menerima semua nilai
-codex exec --skip-git-repo-check "cek sisa storage dan ram di server"
+# 1. install (Node 20+)
+npm install -g lollm
+
+# 2. pull a small model (≈ 400 MB)
+lollm pull qwen2.5:0.5b
+
+# 3. serve on Ollama's port
+lollm serve
 ```
 
-Yang sudah diuji terhadap `codex-cli 0.165.0`: Codex mengirim `tools` sendiri
-(`exec_command`, `write_stdin`, …) lewat `POST /v1/responses`; server mengembalikan
-panggilan itu sebagai item `function_call`, Codex mengeksekusi perintah di sandbox-nya,
-lalu mengirim balik hasilnya sebagai `function_call_output` dan model menjawab memakai
-data tersebut. Jadi perintah seperti `free -m`, `df -h /tmp`, atau `cat` benar-benar
-dijalankan **di mesin tempat Codex berjalan**, bukan di server Vercel.
+Then either open the playground at <http://127.0.0.1:11434/playground>, or talk to it:
 
-Untuk RAM/disk milik server sendiri, pakai tool bawaan `llm_runtime_info`
-(`rss_mb`, `cpu_cores`, `region`) atau `GET /api/health` → `runtime.tmp_disk`
-(`total_mb`, `used_mb`, `free_mb`).
-
-Catatan: serverless tidak punya storage lintas instance, jadi `GET /v1/responses/{id}`
-dan `previous_response_id` hanya bekerja selama instance function yang sama masih hidup
-(cold start menghapusnya). Untuk riwayat panjang, kirim ulang riwayat lewat `input`.
-
----
-
-## Konfigurasi Environment
-
-Repo ini menyertakan satu file **`.env`** (bukan `.env.example`) yang sudah memuat
-seluruh nama variabel yang dibaca kode: nilai default diisi, kredensial dikosongkan.
-
-- **Produksi (Vercel)** — Vercel **tidak** membaca `.env` dari repository. Ke-26 kunci
-  tersebut sudah didaftarkan di *Project Settings → Environment Variables* dengan
-  target `production`, `preview`, dan `development`; isi nilainya dari dashboard,
-  lalu redeploy agar berlaku.
-- **Lokal** — `npm run dev` memuat `.env` otomatis (Node ≥ 20.12). Pada Node lebih
-  lama: `node --env-file=.env scripts/dev-server.mjs`.
-- Jangan isi kredensial asli di `.env` bila repo ini publik; simpan di `.env.local`
-  (sudah di-ignore) atau langsung di dashboard Vercel.
-
-## Penyimpanan Model (S3 / Vercel Blob)
-
-Secara default GGUF diunduh dari Hugging Face ke `/tmp` pada setiap cold start.
-Karena filesystem Vercel bersifat sementara, **file tetap harus ada di `/tmp` sebelum
-llama.cpp memuatnya** — storage eksternal tidak menghapus unduhan itu, tetapi membuatnya:
-
-- lebih cepat & stabil (bucket sendiri, satu region, tanpa rate limit Hugging Face),
-- bisa privat (presigned URL, tidak ada file model yang publik),
-- tidak bergantung pada ketersediaan `huggingface.co`.
-
-### Urutan sumber (`LLM_MODEL_SOURCE=auto`, default)
-
-```
-S3 (LLM_S3_*)  ->  Vercel Blob (LLM_BLOB_*)  ->  base URL (LLM_MODEL_BASE_URL)  ->  Hugging Face
+```bash
+curl http://127.0.0.1:11434/api/chat -d '{
+  "model": "qwen2.5:0.5b",
+  "messages": [{ "role": "user", "content": "Explain GGUF in one sentence." }],
+  "stream": false
+}'
 ```
 
-Sumber pertama yang aktif dicoba; bila gagal (404/403/jaringan), sumber berikutnya
-dicoba otomatis. Mode eksplisit (`LLM_MODEL_SOURCE=s3|blob|url|huggingface`) memakai
-satu sumber saja tanpa fallback. Nama objek selalu `LLM_S3_PREFIX` + nama file model,
-mis. `models/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf`.
+```js
+import OpenAI from "openai";
 
-### Environment variable
+const client = new OpenAI({ baseURL: "http://127.0.0.1:11434/v1", apiKey: "not-needed" });
 
-| Variabel | Default | Fungsi |
+const reply = await client.chat.completions.create({
+  model: "qwen2.5:0.5b",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+console.log(reply.choices[0].message.content);
+```
+
+Already have Ollama? Point its clients at this port instead — or copy models over:
+
+```bash
+lollm pull ollama:qwen2.5:0.5b     # from registry.ollama.ai
+lollm pull ~/.ollama/models/blobs/sha256-<digest> --name mine:latest   # reuse a local blob
+```
+
+## Install
+
+```bash
+npm install -g lollm        # npm package + CLI
+# or, from a checkout:
+git clone https://github.com/xiaoajinid-bot/lollm && cd lollm
+npm install && npm link
+```
+
+`node-llama-cpp` is an **optional dependency**: if its prebuilt binaries are unavailable, the CLI,
+the model store, `lollm list/show/pull` and the HTTP API still work. Real inference needs it:
+
+```bash
+npm install node-llama-cpp
+```
+
+GPU support is inherited from llama.cpp: Metal on macOS, CUDA/Vulkan on Linux and Windows.
+`lollm serve --gpu false` forces CPU-only; `--gpu cuda` forces a backend.
+
+## CLI
+
+```text
+lollm serve                     Start the API server (default 127.0.0.1:11434)
+lollm run <model> [prompt...]   Chat in your terminal (streaming, REPL when no prompt)
+lollm pull <reference>          Fetch a model from Ollama, Hugging Face, a URL or a file
+lollm inspect <url>             Read GGUF metadata remotely (opts: --tensor, --json)
+lollm list                      List installed models
+lollm ps                        Models currently loaded by a running server
+lollm show <model>              Details, template, parameters, Modelfile
+lollm create <name> [-f file]   Create a model from a Modelfile
+lollm cp <src> <dst>            Duplicate a model (shares weights, costs ~0 bytes)
+lollm rm <model...>             Delete manifests
+lollm embed <model> <text...>   Compute an embedding
+lollm version | help
+```
+
+Full reference: [docs/cli.md](docs/cli.md).
+
+## API
+
+Both surfaces are enabled on the same port, with permissive CORS.
+
+### Ollama native
+
+| Method | Path | Notes |
 |---|---|---|
-| `LLM_MODEL_SOURCE` | `auto` | `auto`, `s3`, `blob`, `url`, atau `huggingface` |
-| `LLM_S3_BUCKET` | – | Nama bucket (mengaktifkan sumber S3) |
-| `LLM_S3_REGION` | ditebak dari endpoint / `us-east-1` | Region penandatanganan SigV4 (`auto` untuk R2) |
-| `LLM_S3_ENDPOINT` | `https://s3.<region>.amazonaws.com` | Endpoint S3-compatible (R2, B2, MinIO, Wasabi, Supabase) |
-| `LLM_S3_ACCESS_KEY_ID` / `LLM_S3_SECRET_ACCESS_KEY` | fallback ke `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Kredensial untuk presigned GET |
-| `LLM_S3_SESSION_TOKEN` | fallback `AWS_SESSION_TOKEN` | Token STS bila memakai kredensial sementara |
-| `LLM_S3_PREFIX` | `models/` | Folder objek di dalam bucket |
-| `LLM_S3_FORCE_PATH_STYLE` | `true` untuk endpoint kustom | Path-style (`endpoint/bucket/key`) — wajib untuk R2/MinIO |
-| `LLM_S3_PUBLIC_BASE_URL` | – | Alternatif tanpa kredensial: base URL CDN/publik |
-| `LLM_S3_PRESIGN_TTL` | `900` | Masa berlaku presigned URL (detik, 60–604800) |
-| `LLM_BLOB_BASE_URL` | diturunkan otomatis | Base URL store Blob. Kosong = `https://<store-id>.public.blob.vercel-storage.com` dari `BLOB_STORE_ID` |
-| `BLOB_STORE_ID` | otomatis (integrasi Vercel) | Store ID Blob; dipakai menurunkan base URL publik/privat |
-| `LLM_CONTEXT_SIZE` | `8192` | Ukuran konteks (token), batas atas `16384`. Model ≥ 700 MB otomatis dibatasi `4096` |
-| `LLM_MAX_OUTPUT_TOKENS` | `3072` | Batas token keluaran, batas atas `8192`; efektif dibatasi sisa konteks |
-| `BLOB_READ_WRITE_TOKEN` | otomatis | Token Blob; dipakai hanya jika `LLM_BLOB_PRIVATE=true` |
-| `LLM_BLOB_PRIVATE` | `false` | Kirim header `Authorization: Bearer <token>` saat mengambil blob privat |
-| `LLM_MODEL_BASE_URL` | – | Base URL generik/CDN: `<base>/<nama-file>.gguf` |
+| `GET` | `/` | returns `Ollama is running` (readiness probe) |
+| `GET` | `/api/version` | Ollama-compatible version + the real lollm build |
+| `GET` | `/api/tags` | installed models, sizes, digests, details |
+| `GET` | `/api/ps` | loaded models with `expires_at` |
+| `POST` | `/api/show` | template, system prompt, parameters, `model_info` |
+| `POST` | `/api/chat` | streaming NDJSON, tools, JSON mode |
+| `POST` | `/api/generate` | raw completion, `raw`, `suffix`-free, streaming |
+| `POST` | `/api/embed` | batch embeddings |
+| `POST` | `/api/embeddings` | legacy single-prompt embeddings |
+| `POST` | `/api/pull` | progress stream while downloading |
+| `POST` | `/api/create` | create from a Modelfile |
+| `POST` | `/api/copy` | copy a model |
+| `POST` | `/api/delete` | remove a model |
+| `POST` | `/api/push` | `501` — pushing is intentionally unsupported |
 
-### Batas panjang jawaban
+### OpenAI compatible
 
-Jawaban panjang (menulis kode, merangkum hasil tool) butuh dua hal: konteks yang
-cukup dan `max_tokens` yang tidak dipotong kecil.
-
-- **Konteks** — `contextSize` yang dipakai `llama.cpp` dihitung oleh
-  `getContextSize()` (`lib/model-limits.mjs`): nilai terbesar antara kebutuhan
-  katalog, `LLM_CONTEXT_SIZE`, dan default `8192`, lalu dibatasi `16384`. Model
-  besar (≥ 700 MB, mis. 1B) otomatis dibatasi `4096` supaya model + KV cache
-  tetap muat di RAM function; set `LLM_CONTEXT_SIZE` eksplisit bila ingin menimpa.
-- **Keluaran** — default `3072` token (`LLM_MAX_OUTPUT_TOKENS`), batas atas
-  `8192`. Nilai efektif selalu dibatasi sisa konteks: maksimum
-  `konteks − max(512, 25% konteks)` agar prompt + riwayat + hasil tool tetap muat.
-- **Riwayat** — `fitHistoryToContext()` membuang giliran terlama bila total
-  prompt melebihi anggaran konteks; giliran terbaru dan system prompt selalu
-  dipertahankan (sebelumnya riwayat bisa memicu overflow pada konteks 2048).
-- **UI** — slider *Max Tokens* di sidebar menjangkau `256–8192` (default `3072`)
-  dan nilainya dikirim sebagai `max_tokens`; server tetap melakukan clamp.
-
-Contoh meminta jawaban panjang lewat API:
-
-```bash
-curl -s https://lokal-llm.vercel.app/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [{"role": "user", "content": "Tulis modul Python lengkap untuk antrean tugas."}],
-    "max_tokens": 4096
-  }'
-```
-
-### Contoh: Cloudflare R2
-
-```bash
-LLM_S3_BUCKET="lollm-models"
-LLM_S3_ENDPOINT="https://<account-id>.r2.cloudflarestorage.com"
-LLM_S3_REGION="auto"
-LLM_S3_ACCESS_KEY_ID="<access-key>"
-LLM_S3_SECRET_ACCESS_KEY="<secret-key>"
-LLM_S3_PREFIX="models/"
-LLM_S3_FORCE_PATH_STYLE="true"
-```
-
-### Contoh: AWS S3
-
-```bash
-LLM_S3_BUCKET="lollm-models"
-LLM_S3_REGION="ap-southeast-2"
-# LLM_S3_ENDPOINT dikosongkan -> virtual-host style
-LLM_S3_ACCESS_KEY_ID="<access-key>"
-LLM_S3_SECRET_ACCESS_KEY="<secret-key>"
-```
-
-### Contoh: Vercel Blob (storage bawaan)
-
-1. Buat Blob store di dashboard Vercel lalu hubungkan ke project (`BLOB_READ_WRITE_TOKEN`
-   otomatis tersedia sebagai env).
-2. Unggah file GGUF (dashboard, atau `vercel blob put <file>` pada Vercel CLI terbaru).
-3. Isi base URL publik store:
-
-```bash
-LLM_BLOB_BASE_URL="https://<store-id>.public.blob.vercel-storage.com"
-# LLM_BLOB_PRIVATE="true"   # bila store disetel privat
-```
-
-### Mengunggah model sekali dari komputer lokal
-
-```bash
-aws s3 cp Qwen2.5-0.5B-Instruct-Q4_K_M.gguf s3://lollm-models/models/
-# atau dengan rclone (R2/MinIO/B2)
-rclone copy Qwen2.5-0.5B-Instruct-Q4_K_M.gguf r2:lollm-models/models/
-```
-
-### Verifikasi tanpa memuat model
-
-```bash
-curl -s https://lollm-psi.vercel.app/api/storage | jq '.storage.models'
-curl -s https://lollm-psi.vercel.app/api/storage/check | jq '.results'
-```
-
-`/api/storage/check` melakukan `GET` dengan `Range: bytes=0-0` ke objek tiap model,
-lalu melaporkan `ok`, status HTTP, dan ukuran file — cukup untuk memastikan bucket,
-kredensial, prefix, dan nama file sudah benar.
-
-## Tampilan streaming di Web Chat UI
-
-Tab **Chat** memakai dua mode tampilan untuk jawaban asisten, supaya teks tetap
-enak dibaca saat token belum lengkap:
-
-1. **Selagi streaming** — token yang masuk lewat SSE ditulis sebagai **teks polos**
-   (`textContent`, bukan HTML). CSS `.msg-bubble.is-streaming` memakai
-   `white-space: pre-wrap` sehingga baris, indentasi, dan blok kode yang belum
-   ditutup tetap terbaca apa adanya, plus kursor `▍` sebagai penanda proses.
-   Pelukisan dibatasi maksimal sekali per `requestAnimationFrame`, jadi tetap
-   ringan walau token datang sangat cepat.
-2. **Setelah selesai** — `[DONE]`, tombol Stop, atau error: teks polos diganti
-   hasil `renderMarkdown()` sekali jalan (paragraf, `**tebal**`, `` `kode` ``,
-   dan blok ```` ``` ```` jadi `<pre><code>`).
-
-Artinya markdown setengah jadi tidak pernah dirender, dan yang tersimpan di
-`state.messages` tetap teks mentah dari model (dipakai untuk riwayat percakapan).
-
-## Model Store (tab di Web UI)
-
-Tab **Model Store** di halaman utama menggantikan panel dokumentasi/tester endpoint
-yang lama. Isinya dua kolom:
-
-- **Katalog** — semua model GGUF yang dikenal aplikasi, lengkap dengan ukuran dan
-  kuantisasi. Tombol **Simpan** menyalin file dari sumber (Hugging Face) ke bucket
-  S3 Anda, sehingga request berikutnya memakai storage sendiri dan tidak bergantung
-  pada Hugging Face.
-- **Di storage** — objek `.gguf` yang benar-benar ada di bucket, dengan tombol
-  **Muat** (menjadikannya model aktif di tab Chat) dan **Hapus**.
-
-Di tab **Chat**, daftar model yang tersedia ditampilkan sebagai chip tepat di atas
-kotak pesan; chip terpilih dipakai sebagai `model` pada request `/v1/chat/completions`.
-
-### Kontrak endpoint
-
-```bash
-# Ringkasan katalog + isi bucket
-curl -s https://lollm-psi.vercel.app/api/store | jq '{capabilities, catalog: [.catalog[] | {id, in_storage}]}'
-
-# Simpan satu model (pakai force: true untuk menimpa)
-curl -s -X POST https://lollm-psi.vercel.app/api/store/save \
-  -H "Content-Type: application/json" \
-  -d '{"model":"smollm2-360m-instruct"}'
-
-# Hapus satu objek (hanya di dalam prefix LLM_S3_PREFIX dan berakhiran .gguf)
-curl -s -X POST https://lollm-psi.vercel.app/api/store/delete \
-  -H "Content-Type: application/json" \
-  -d '{"key":"models/SmolLM2-360M-Instruct-Q4_K_M.gguf"}'
-```
-
-`GET /api/store` mengembalikan:
-
-```jsonc
-{
-  "ok": true,
-  "capabilities": { "can_list": true, "can_save": true, "can_delete": true,
-                    "bucket": "lollm-models", "prefix": "models", "reason": null },
-  "catalog": [{ "id": "qwen2.5-0.5b-instruct", "size_mb": 379,
-                "in_storage": true, "storage_key": "models/…gguf" }],
-  "objects": [{ "key": "models/…gguf", "size_mb": 379, "last_modified": "…",
-                "matched_model": "qwen2.5-0.5b-instruct" }],
-  "truncated": false,
-  "errors": []
-}
-```
-
-Catatan perilaku:
-
-- `in_storage` bernilai `null` bila daftar bucket gagal dibaca — bukan `false` —
-  supaya UI bisa membedakan "belum tersimpan" dari "tidak tahu".
-- Tanpa kredensial S3, ketiga endpoint tetap menjawab dengan `capabilities.reason`
-  dan `can_save`/`can_delete`/`can_list` = `false` (tulis/hapus → HTTP `501`).
-- URL presigned di-redact query-nya sebelum ditampilkan; kredensial tidak pernah
-  dikirim ke klien.
-
-### Catatan performa
-
-- Status sumber terakhir terlihat di `GET /api/health` (`last_download.source`,
-  `last_download.duration_ms`) dan di panel model pada UI.
-- `/tmp` pada Vercel Functions maksimal ~512 MB; model > 400 MB akan menghapus model
-  lain yang tersimpan (perilaku lama tetap dipertahankan).
-- Menaruh bucket di region yang sama dengan function (mis. `iad1`) memberi unduhan
-  paling cepat; Hugging Face tetap dipakai sebagai fallback bila bucket belum siap.
-
-## Function / Tool Calling & Connector
-
-Model dapat memanggil **tool** (fungsi lokal) maupun **connector** (API HTTP eksternal)
-sebelum menjawab. Server mengeksekusi tool secara otomatis, lalu mengirim hasilnya
-kembali ke model untuk menghasilkan jawaban final — semuanya dalam satu request.
-
-### Endpoint
-
-| Method | Endpoint | Deskripsi |
-|---|---|---|
-| `GET` | `/api/tools` (alias `/v1/tools`) | Katalog tool & connector dalam format schema OpenAI (`tools[]`) |
-| `POST` | `/api/tools` | Memanggil tool secara langsung (tanpa LLM), berguna untuk debugging |
-| `POST` | `/v1/chat/completions` | Mendukung `tools`, `functions` (legacy), `tool_choice`, `max_tool_rounds` |
-
-### Contoh `curl`
-
-```bash
-# Lihat tool yang tersedia
-curl -s https://lollm-psi.vercel.app/api/tools
-
-# Chat dengan tool calling
-curl -s https://lollm-psi.vercel.app/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "qwen2.5-0.5b-instruct",
-    "messages": [{"role": "user", "content": "Berapa (19*23)+7 dan jam berapa sekarang?"}],
-    "tools": [
-      {
-        "type": "function",
-        "function": {
-          "name": "calculate",
-          "description": "Menghitung ekspresi matematika",
-          "parameters": {
-            "type": "object",
-            "properties": {"expression": {"type": "string"}},
-            "required": ["expression"]
-          }
-        }
-      }
-    ],
-    "tool_choice": "auto",
-    "max_tool_rounds": 2
-  }'
-```
-
-Respons JSON menyertakan `choices[0].message.content` (jawaban final) dan
-`tool_trace` berisi tool yang dijalankan server:
-
-```json
-{
-  "choices": [{ "index": 0, "message": { "role": "assistant", "content": "..." }, "finish_reason": "stop" }],
-  "tool_trace": [
-    { "name": "calculate", "arguments": { "expression": "(19*23)+7" }, "ok": true, "duration_ms": 1, "result_preview": "{\"result\":444}" }
-  ],
-  "tool_rounds": 2,
-  "usage": { "prompt_tokens": 120, "completion_tokens": 48, "total_tokens": 168 }
-}
-```
-
-Saat `stream: true`, jejak tool dikirim sebagai komentar SSE
-(`: status {"phase":"tool_call"|"tool_result", ...}`) sehingga tidak mengganggu
-klien OpenAI standar, dan blok JSON panggilan tool tidak pernah muncul sebagai isi jawaban.
-
-### Cara kerja
-
-1. Kontrak tool (nama, deskripsi, skema argumen) disuntikkan ke system prompt.
-2. Keluaran model diparse dari beberapa format: `<tool_call>{...}</tool_call>`,
-   blok ```` ```json ````, atau JSON telanjang `{"name":..., "arguments":...}`.
-3. Tool yang dikenal server dieksekusi, hasilnya dikirim balik sebagai pesan `role: "tool"`,
-   lalu model melanjutkan generasi (maksimum `max_tool_rounds`, default 3, batas 6).
-4. Tool yang **tidak** dikenal server dianggap milik client → respons berhenti dengan
-   `finish_reason: "tool_calls"` + `message.tool_calls`, dan client yang mengeksekusi.
-
-**Tool-first (default aktif).** Server selalu menyuntikkan `TOOL_AGENT_POLICY` ke
-system prompt, jadi aturan "pakai tool lebih dulu" tidak bisa ditimpa system prompt
-klien. Bila klien mengirim `tool_choice: "auto"` tetapi pertanyaan jelas butuh data
-(angka, jam/tanggal, cuaca, pencarian, status server, URL), putaran pertama dipaksa
-memanggil tool (`required`) dan teks putaran itu ditahan sampai keputusan tool
-keluar. Kalau model tetap menolak, jawaban aslinya yang ditampilkan (bukan error).
-Matikan dengan env `LLM_TOOL_FIRST=off`. Di Web UI, toggle **Selalu pakai tool**
-(default ON) mengirim `tool_choice: "required"` dari browser.
-
-### Tool bawaan
-
-| Tool | Fungsi |
+| Method | Path |
 |---|---|
-| `get_current_time` | Tanggal & jam (zona waktu IANA) |
-| `calculate` | Aritmetika aman via parser sendiri (tanpa `eval`), mendukung `sqrt`, `min`, `max`, `^` |
-| `convert_units` | Konversi panjang, massa, volume, data, kecepatan, waktu, dan suhu |
-| `wikipedia_summary` | Ringkasan artikel Wikipedia (id/en/jv/su) |
-| `llm_runtime_info` | Status runtime LLM (model aktif, RAM, region Vercel) |
-| `http_fetch` | GET/POST ke API publik — **wajib allowlist** |
+| `GET` | `/v1/models`, `/v1/models/{id}` |
+| `POST` | `/v1/chat/completions` |
+| `POST` | `/v1/completions` |
+| `POST` | `/v1/embeddings` |
 
-### Connector kustom (`LLM_CONNECTORS`)
+Streaming, `tools` / `tool_calls`, `response_format` (`json_object` and `json_schema`), `stop`,
+`seed`, `stream_options.include_usage` and token usage are all supported.
 
-Tambahkan environment variable berikut di Vercel (Project → Settings → Environment Variables):
+Request/response examples for every endpoint: [docs/api.md](docs/api.md).
+
+## Models
+
+### Pull sources
 
 ```bash
-LLM_CONNECTORS='[
-  {
-    "name": "cuaca_kota",
-    "description": "Info cuaca terkini untuk sebuah kota",
-    "parameters": {
-      "type": "object",
-      "properties": { "kota": { "type": "string" } },
-      "required": ["kota"]
-    },
-    "request": {
-      "url": "https://api.contoh.com/cuaca?q={{kota}}&unit=c",
-      "method": "GET",
-      "headers": { "Authorization": "Bearer {{env:CUACA_API_KEY}}" }
-    },
-    "response_path": "current",
-    "max_chars": 1200
-  },
-  {
-    "name": "buat_tiket",
-    "description": "Membuat tiket dukungan baru",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "judul": { "type": "string" },
-        "prioritas": { "type": "string", "enum": ["low", "high"] }
-      },
-      "required": ["judul"]
-    },
-    "request": {
-      "url": "https://api.contoh.com/tiket",
-      "method": "POST",
-      "body": { "title": "{{judul}}", "priority": "{{prioritas}}" }
-    },
-    "response_path": "data.id"
-  }
-]'
-
-# Host tujuan wajib ada di allowlist (proteksi SSRF)
-LLM_TOOL_HTTP_ALLOW_HOSTS="api.contoh.com"
+lollm pull qwen2.5:0.5b                                         # registry.ollama.ai
+lollm pull ollama:gemma3:4b                                     # explicit
+lollm pull hf:Qwen/Qwen2.5-0.5B-Instruct-GGUF:qwen2.5-0.5b-instruct-q4_k_m.gguf --name qwen2.5:0.5b
+lollm pull https://huggingface.co/org/repo/resolve/main/model.gguf --name mine:q4
+lollm pull hf:unsloth/Qwen3.8-27B-GGUF:BF16/Qwen3.8-27B-BF16-00001-of-00002.gguf   # split part 1
+lollm pull ./downloads/my-model.gguf --name mine:latest          # import, content-addressed
 ```
 
-Placeholder yang didukung: `{{nama_argumen}}` untuk argumen model dan
-`{{env:NAMA_ENV}}` untuk secret. `response_path` memakai dot-path
-(`data.items.0.name`) untuk memangkas respons, `max_chars` membatasi ukuran hasil.
+Private Hugging Face repos: set `HF_TOKEN`.
 
-### Environment variable terkait
+### Nothing is capped unless you say so
 
-| Variabel | Default | Fungsi |
+`lollm` does not invent limits. Out of the box:
+
+| Knob | Default | Meaning |
 |---|---|---|
-| `LLM_CONNECTORS` | – | JSON array definisi connector HTTP |
-| `LLM_TOOL_HTTP_ALLOW_HOSTS` | – | Allowlist host untuk `http_fetch` & connector (wajib) |
-| `LLM_TOOLS_DISABLED` | – | Daftar nama tool dipisah koma untuk dimatikan |
-| `LLM_TOOL_MAX_ROUNDS` | `3` | Batas putaran tool per request (maks 6) |
-| `LLM_TOOLS_DIRECT_INVOKE` | aktif | Set `disabled` untuk menonaktifkan `POST /api/tools` |
+| output tokens | unlimited | generation runs until the model emits an end token (or fills its context) |
+| context window | the model's own | `llama.cpp` picks the window the GGUF was trained with; `lollm` never clamps it |
+| request body | unlimited | no hidden 1 MB/64 MB cut-off for big prompts or base64 images |
+| batch/queue | 1 generation at a time | concurrency, not a token limit — raise with `--parallel` |
 
-### Keamanan
-
-- `calculate` memakai parser sendiri — tidak ada `eval`/`Function` yang bisa dieksploitasi.
-- `http_fetch` dan connector selalu menolak `localhost`, IP privat/link-local
-  (`127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `::1`, `fc00::/7`),
-  host `.local`/`.internal`, serta metadata cloud; host lain harus ada di allowlist.
-- Hasil tool dibatasi ukurannya (`max_chars`, maksimum 64 KB per respons HTTP) agar konteks model tidak jebol.
-- `POST /api/tools` bisa dimatikan lewat `LLM_TOOLS_DIRECT_INVOKE=disabled`.
-- **API tidak memakai autentikasi**: siapa pun yang tahu URL bisa memakai model dan semua
-  tool aktif. `http_fetch`/connector tetap dibatasi allowlist, tetapi tool baca-saja
-  (`llm_runtime_info`, `get_current_time`, `wikipedia_summary`) dan tool tulis S3
-  (`/api/store/save`, `/api/store/delete`) terbuka. Persempit dengan
-  `LLM_TOOLS_DISABLED`, `LLM_TOOL_HTTP_ALLOW_HOSTS`, atau kosongkan kredensial S3
-  bila deployment benar-benar publik.
-
-### Uji otomatis
+Every cap is opt-in, by flag or environment variable:
 
 ```bash
-npm test                                          # 159 test: parser tool, executor, agent loop,
-                                                  #   endpoint API (SSE), Responses API, storage
-JSDOM_PATH=/path/node_modules/jsdom \
-  node tests/ui/functional.mjs                    # 98 test UI (jsdom, opsional)
+lollm serve --max-tokens 512            # LOLLM_MAX_TOKENS
+lollm serve --context-size 8192         # LOLLM_CONTEXT_SIZE (or "auto" for the model default)
+lollm serve --max-body-bytes 104857600  # LOLLM_MAX_BODY_BYTES (0 = unlimited)
 ```
 
----
+Per request, Ollama's `options.num_predict` and OpenAI's `max_tokens` still work; `-1`, `0` or an
+omitted value all mean "no cap".
 
-## UTCP (Universal Tool Calling Protocol)
+### Inspect a model before you download it
 
-Server ini juga berbicara **UTCP** — standar terbuka dari
-[universal-tool-calling-protocol/typescript-utcp](https://github.com/universal-tool-calling-protocol/typescript-utcp)
-yang memungkinkan agen memanggil tool lintas protokol (HTTP, MCP, SSE, …) tanpa
-middleware tambahan. Implementasinya native (tanpa dependency baru) dan dibatasi
-pada transport yang masuk akal untuk Vercel Serverless.
+A GGUF file starts with a header that describes everything (architecture, parameter count, context
+size, quantization, tensor table) and is typically a few hundred kilobytes; the weights that follow
+are gigabytes. `lollm inspect` exploits that split: it asks the server for the first bytes only,
+parses the header, and stops.
 
-### Dua arah integrasi
+```console
+$ lollm inspect https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf
+  size          4.7 GB
+  architecture  qwen2
+  parameters    7,615,616,512 (Q4_K_M)
+  context       32768
+  tensors       339
+  chat template present
 
-**A. Sebagai UTCP provider** — server menerbitkan manual sendiri:
+  on-demand I/O
+  requests      3
+  downloaded    256.0 KB (0.01% of the file)
+  saved         4.7 GB
+
+  only metadata was fetched; tensor payloads are read on demand with Range requests
+```
+
+`--tensor <name>` goes one step further and pulls a single tensor's slice (useful to verify
+quantization or to fingerprint a file without mirroring it):
+
+```console
+$ lollm inspect <url> --tensor token_embd
+token_embd.weight
+  type      Q4_K
+  dims      [3584 × 152064]
+  elements  545,030,144
+  file      offset 3,664,832
+
+  fetched   64.0 KB slice (sha256 07dcb6d11a036248…)
+  network   3 request(s), 512.0 KB total
+
+  only this slice was fetched with Range requests; the rest of the file stayed on the server
+```
+
+How it works, and what it means for you:
+
+- One `Range: bytes=0-0` probe learns the file size and whether the host honours ranges. A server
+  that answers `200` instead of `206` is rejected with `range_not_supported` rather than silently
+  streaming gigabytes into the parser.
+- Every later read is a block-aligned `Range` request (256 KB by default, `--block-size` to tune)
+  with an LRU cache and `If-Range: <etag>` revalidation, so re-parsing a header is free.
+- `lollm pull <url>` uses the same header probe first: a URL that is not a GGUF file fails in
+  milliseconds instead of downloading it, and the transfer itself resumes from `.part` files
+  (Range + `ETag`) after a Ctrl+C, a crash or a dropped connection.
+- `--json` prints the same data machine-readable, tensors included.
+- Plain `http://` is refused unless `LOLLM_ALLOW_INSECURE=1` (or `--allow-insecure`); use HTTPS.
+- `LOLLM_HF_ENDPOINT` (or `--hf-endpoint`) points `hf:` references at a mirror or a local fixture
+  server, which is also how the Range tests run offline.
+
+Which architectures actually run (and which GGUF flavours do not): [docs/compatibility.md](docs/compatibility.md).
+
+To check a whole list of models at once (exit code 1 if any of them is unreachable):
 
 ```bash
-curl -s https://lollm-psi.vercel.app/.well-known/utcp
+npm run verify:remote -- <url|hf:repo:file.gguf> [...] [--tensor name] [--json]
 ```
 
-```json
-{
-  "utcp_version": "1.0.0",
-  "manual_version": "1.0.0",
-  "tools": [
-    {
-      "name": "calculate",
-      "description": "Menghitung ekspresi matematika (aritmetika, pangkat, akar, fungsi seperti sqrt/min/max).",
-      "inputs": { "type": "object", "properties": { "expression": { "type": "string" } }, "required": ["expression"] },
-      "outputs": {},
-      "tags": ["builtin", "lollm"],
-      "tool_call_template": {
-        "call_template_type": "http",
-        "name": "lollm",
-        "http_method": "POST",
-        "url": "https://lollm-psi.vercel.app/api/tools?tool=calculate",
-        "content_type": "application/json"
-      }
-    }
-  ]
-}
+### Storage layout
+
+Identical in spirit to Ollama, so backups and `sha256`-deduplication behave the same:
+
+```text
+~/.lollm/
+├── config.json
+└── models/
+    ├── blobs/
+    │   └── sha256-<hex>                              # GGUF weights + template/system/params layers
+    └── manifests/
+        └── lollm.local/library/qwen2.5/0.5b         # JSON manifest (OCI-style layers)
 ```
 
-Klien UTCP (TypeScript/Python) bisa langsung `registerManual({ call_template_type: 'http', url: '<domain>/.well-known/utcp' })`
-lalu memanggil `lollm.calculate({ expression: "2+2" })`.
+`lollm cp` and Modelfile variants reference the same blobs — no duplicated gigabytes.
 
-**B. Sebagai UTCP client** — server menarik manual pihak ketiga dan
-mengeksposnya sebagai tool untuk model:
+### Modelfile
+
+```dockerfile
+FROM qwen2.5:0.5b
+
+PARAMETER temperature 0.7
+PARAMETER num_ctx 8192
+PARAMETER stop "<|im_end|>"
+
+SYSTEM """You are a patient tutor. Answer in Indonesian."""
+
+TEMPLATE """<|im_start|>system
+{{ .System }}<|im_end|>
+<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+"""
+```
 
 ```bash
-# 1) Discovery ad-hoc
-curl -s https://lollm-psi.vercel.app/api/utcp/discover \
-  -H "Content-Type: application/json" \
-  -d '{"url":"https://contoh.com/.well-known/utcp","name":"demo"}'
-
-# 2) Panggil tool hasil discovery
-curl -s https://lollm-psi.vercel.app/api/utcp/call \
-  -H "Content-Type: application/json" \
-  -d '{"tool":"demo.get_weather","arguments":{"city":"Bandung"}}'
+lollm create tutor -f Modelfile
+lollm run tutor "Apa itu GGUF?"
 ```
 
-Untuk pemakaian permanen, daftarkan lewat environment variable:
+Details and the supported template subset: [docs/modelfile.md](docs/modelfile.md).
 
-```bash
-LLM_UTCP_MANUALS='[
-  {"name":"cuaca","call_template_type":"http","url":"https://contoh.com/.well-known/utcp"},
-  {"name":"openapi_demo","call_template_type":"http","url":"https://contoh.com/openapi.json"},
-  {"name":"tools","call_template_type":"mcp","config":{"mcpServers":{"main":{"transport":"http","url":"https://mcp.contoh.com/mcp"}}}},
-  {"name":"inline","call_template_type":"text","content":"{\"utcp_version\":\"1.0.0\",\"tools\":[{\"name\":\"ping\",\"tool_call_template\":{\"call_template_type\":\"http\",\"url\":\"https://contoh.com/ping\"}}]}"}
-]'
+## Configuration
 
-# Host tujuan wajib diizinkan (proteksi SSRF)
-LLM_TOOL_HTTP_ALLOW_HOSTS="contoh.com,mcp.contoh.com,api.contoh.com"
-```
+All flags also read environment variables; a `~/.lollm/config.json` can set defaults.
 
-Setelah itu tool muncul otomatis di `GET /api/tools` (source `utcp`) dan di panel
-**Tool & Connector** pada Web UI, siap dipanggil model lewat `tools` seperti biasa.
-
-### Endpoint UTCP
-
-| Method | Endpoint | Deskripsi |
-|---|---|---|
-| `GET` | `/.well-known/utcp` (alias `/api/utcp/manual`) | Manual UTCP milik server ini |
-| `GET` | `/api/utcp` | Status manual terdaftar, protokol yang didukung, konfigurasi |
-| `POST` | `/api/utcp/discover` | Discovery manual dari URL / template (UTCP manual, OpenAPI, MCP) |
-| `POST` | `/api/utcp/call` | Memanggil tool UTCP terdaftar (`{"tool":"manual.tool","arguments":{…}}`) |
-
-### Kompatibilitas transport
-
-| Transport | Discovery manual | Pemanggilan tool | Catatan |
+| Flag | Env | Default | Meaning |
 |---|---|---|---|
-| `http` | ✅ | ✅ | Path/query/header/body, `auth` (api_key, basic, oauth2 client credentials) |
-| `streamable_http` | – | ✅ | Respons streaming diagregasi |
-| `mcp` (transport `http`) | ✅ `tools/list` | ✅ `tools/call` | JSON-RPC + SSE response, sesi `Mcp-Session-Id` |
-| `sse` | – | ⚠️ terbatas | Mengumpulkan event sampai timeout (serverless tidak boleh koneksi panjang) |
-| `text` | ✅ | – | Manual inline di env |
-| `file` | ✅ (opt-in) | – | Hanya di dalam `LLM_UTCP_FILE_ROOT`, butuh `LLM_UTCP_ALLOW_FILE=true` |
-| `cli`, `websocket`, `grpc`, `mcp stdio` | ❌ | ❌ | Butuh proses/koneksi persisten — tidak tersedia di serverless |
+| `--host` | `LOLLM_HOST` | `127.0.0.1` | bind address (`0.0.0.0` for Docker/LAN) |
+| `--port` | `LOLLM_PORT` | `11434` | port |
+| `--home` | `LOLLM_HOME` | `~/.lollm` | data directory |
+| `--models-dir` | `LOLLM_MODELS_DIR` | `<home>/models` | model store |
+| `--backend` | `LOLLM_BACKEND` | `llama` | `llama` or `mock` |
+| `--gpu` | `LOLLM_GPU` | `auto` | `auto`, `false`, `cuda`, `metal`, `vulkan` |
+| `--gpu-layers` | `LOLLM_GPU_LAYERS` | auto | layers offloaded to the GPU |
+| `--context-size` | `LOLLM_CONTEXT_SIZE` | `4096` | default context window |
+| `--parallel` | `LOLLM_PARALLEL` | `1` | concurrent generations |
+| `--max-loaded-models` | `LOLLM_MAX_LOADED_MODELS` | `1` | models kept in memory |
+| `--keep-alive` | `LOLLM_KEEP_ALIVE` | `5m` | idle time before unloading |
+| `--verbose` | `LOLLM_VERBOSE` | `false` | debug logging |
+| — | `HF_TOKEN` | — | Hugging Face token for gated repos |
+| — | `LOLLM_OLLAMA_REGISTRY` | `https://registry.ollama.ai` | registry base URL |
 
-Tool dengan transport yang tidak didukung tetap ditampilkan di hasil discovery
-dengan `supported: false` beserta alasannya, sehingga tidak gagal diam-diam.
+Per-request `keep_alive` follows Ollama semantics: `"30m"`, `0` (unload now), `-1` (pin forever).
 
-### Fitur UTCP yang diikuti
+## Embedding it in your app
 
-- Format manual: `utcp_version`, `manual_version`, `tools[]` (`name`, `description`,
-  `inputs`, `outputs`, `tags`, `average_response_size`, `tool_call_template`)
-- Penamaan tool bernamespace: `manual.tool` (dipakai juga untuk MCP: `manual.tool`)
-- Substitusi variabel `${VAR}` dengan namespace manual (`github_api` → `github__api_VAR`)
-  dan `${env:VAR}` untuk secret
-- Placeholder URL `{param}` / `${param}`, `header_fields`, `body_field`, `content_type`
-- Konversi **OpenAPI 3 / Swagger 2** → UTCP manual (GET/POST/PUT/PATCH/DELETE,
-  parameter path/query/header + request body)
-- Discovery via HTTP (JSON), text inline, MCP `tools/list`, dan berkas lokal (opt-in)
-- Guard keamanan sama seperti connector: allowlist host + blokir alamat privat,
-  link-local, metadata cloud, dan `.internal`
+```js
+import { start } from "lollm";
 
-### Environment variable UTCP
+const app = await start({ host: "127.0.0.1", port: 11434 });
+console.log(app.url);              // http://127.0.0.1:11434
+console.log(app.engine.status());  // loaded models, queue depth, token counters
+await app.close();                 // closes the server and unloads models
+```
 
-| Variabel | Default | Fungsi |
-|---|---|---|
-| `LLM_UTCP_MANUALS` | – | JSON array manual call template (`http`, `text`, `mcp`, `file`) |
-| `LLM_TOOL_HTTP_ALLOW_HOSTS` | – | Allowlist host untuk discovery & pemanggilan (dipakai bersama connector) |
-| `LLM_UTCP_ALLOW_FILE` | `false` | Izinkan template `file` |
-| `LLM_UTCP_FILE_ROOT` | `/tmp` | Root direktori yang boleh dibaca template `file` |
+Lower level pieces are exported too: `createInstance()`, `Engine`, `ModelStore`, `createMockBackend`,
+`parseModelfile`, `parseModelName`, `readGgufInfo`, `renderTemplate`.
 
-Manual yang di-discovery di-cache 5 menit di memori instance (warm invocation),
-sehingga tidak ada request discovery berulang pada setiap chat.
+## Architecture
+
+```text
+                      ┌──────────────────────────────────────────────┐
+  ollama clients ───▶ │  /api/*   API layer (NDJSON)                 │
+  openai SDKs ──────▶ │  /v1/*     API layer (SSE)                   │
+  browser ──────────▶ │  /playground                                 │
+                      └───────────────────────┬──────────────────────┘
+                                              │
+                                     ┌────────▼────────┐
+                                     │     Engine      │  queue · keep-alive · LRU · stats
+                                     └────┬───────┬────┘
+                              ┌───────────▼──┐  ┌─▼──────────────┐
+                              │ Model store  │  │   Backend      │
+                              │ blobs +      │  │ llama.cpp via  │──▶ node-llama-cpp
+                              │ manifests    │  │ node-llama-cpp │    (GGUF, GPU/CPU)
+                              └──────────────┘  └────────────────┘
+```
+
+A request runs through: JSON validation → model resolution (manifest → blob) → queue slot →
+model load (if cold) → generation (streamed token callbacks) → Ollama/OpenAI-encoded response
+with timing fields. The engine keeps exactly one hot model by default, unloads it after
+`keep_alive`, and evicts the least recently used model when a different one is requested.
+
+## Testing
+
+```bash
+npm test          # 110 tests, no model download, no GPU, no network
+npm run check     # syntax check every module
+```
+
+The suite runs against the **mock backend**, which implements the real backend contract
+(streaming, tool calls, embeddings) deterministically. That keeps CI fast and hermetic while
+still exercising the HTTP layer, streaming framing, the model store, GGUF parsing (including
+on-demand Range reads and resumable downloads against a local HTTP fixture server), Modelfiles
+and template rendering. Nothing leaves loopback.
+
+Real-inference smoke tests are intentionally not in CI: they need multi-hundred-megabyte weights.
+Run `lollm serve` locally and use `/playground` instead.
+
+## Docker
+
+```bash
+docker build -t lollm .
+docker run --rm -p 11434:11434 -v lollm-models:/root/.lollm lollm
+```
+
+## Differences from Ollama
+
+Being explicit about the edges is more useful than pretending to be a drop-in replacement:
+
+- **Not every Ollama feature exists.** `push`, model signatures/verification, multi-modal
+  projector layers and LoRA adapters are not implemented (adapters are skipped on pull, with a
+  warning; images are accepted and ignored).
+- **`/api/version` reports an Ollama-compatible version** so clients that gate on it work, plus a
+  `lollm` field with the real build. `/api/health` exposes the truth.
+- **Prompt formatting uses the model's own template when it has one**, otherwise
+  `node-llama-cpp`'s chat wrapper for that architecture (ChatML, Llama 3, Gemma, Qwen, …). The
+  Go-template subset is documented in [docs/modelfile.md](docs/modelfile.md).
+- **Tool calling** maps JSON Schemas to llama.cpp grammars. Function-call *execution* happens on
+  the client, exactly like Ollama (the server returns `tool_calls`, it never runs your code).
+- **One hot model by default** keeps RAM predictable on laptops; raise `--max-loaded-models`
+  if you have headroom.
+
+## Roadmap
+
+- [ ] LoRA adapter layers (`application/vnd.ollama.image.adapter`)
+- [ ] Multi-modal `projector` support
+- [ ] `/api/push` to a registry
+- [ ] `lollm prune` for unreferenced blobs
+- [ ] HTTP/2 + WebSocket transport for the playground
+- [ ] Prometheus metrics endpoint
+
+## License
+
+[MIT](LICENSE) — llama.cpp, `node-llama-cpp` and every pulled model keep their own licenses.
