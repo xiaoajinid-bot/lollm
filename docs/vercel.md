@@ -84,9 +84,14 @@ After the first deploy, check:
 
 ```bash
 curl -s https://<deployment>/api/version
+curl -s https://<deployment>/api/boot     # cold start: backend, boot model, timings, errors
 curl -s https://<deployment>/api/tags
 open  https://<deployment>/playground
 ```
+
+`npm run smoke -- https://<deployment>` runs the full round trip (version, tags, playground,
+streaming and non-streaming chat, OpenAI endpoint) and exits non-zero on the first failure. The
+"Smoke test a deployed instance" workflow does the same on demand from GitHub.
 
 ## Making the deployment public
 

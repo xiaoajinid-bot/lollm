@@ -27,7 +27,8 @@ jobs:
           node-version: 22.x
       - name: Smoke test
         env:
-          BASE_URL: ${{ inputs.url || vars.LOLLM_SMOKE_URL || 'https://lollm-ai-pied.vercel.app' }}
+          # Explicit input > repository variable > the deployment alias of the pushed branch.
+          BASE_URL: ${{ inputs.url || vars.LOLLM_SMOKE_URL || format('https://lollm-ai-git-{0}-xiaoajinid-bots-projects.vercel.app', replace(github.ref_name, '/', '-')) }}
           MODEL: ${{ inputs.model }}
         run: |
           node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000
