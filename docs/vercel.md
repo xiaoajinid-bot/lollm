@@ -51,7 +51,7 @@ Environment variables:
 
 | Variable | Default on Vercel | Meaning |
 |---|---|---|
-| `LOLLM_HOME` | `/tmp/lollm` | data directory (only `/tmp` is writable) |
+| `LOLLM_HOME` | private `mkdtemp` directory in the platform temp dir | data directory (only the temp dir is writable) |
 | `LOLLM_BACKEND` | `mock` | `mock` or `llama` |
 | `LOLLM_SEED_DEMO` | `1` | seed `lollm-demo:latest` when the store is empty |
 | `LOLLM_PLAYGROUND` | `1` | serve `/playground` |
@@ -79,6 +79,14 @@ curl -s https://<deployment>/api/version
 curl -s https://<deployment>/api/tags
 open  https://<deployment>/playground
 ```
+
+## Making the deployment public
+
+Vercel accounts default to **Standard Protection**, so `https://<deployment>.vercel.app` redirects
+to a Vercel login even for production. To expose the API publicly, open *Project → Settings →
+Deployment Protection* and set **Vercel Authentication** to **Disabled** (or attach a custom domain,
+which is not covered by the default `all_except_custom_domains` policy). Preview deployments stay
+private unless you disable protection for them too.
 
 ## Real inference on Vercel (opt-in)
 

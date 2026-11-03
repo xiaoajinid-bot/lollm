@@ -13,6 +13,9 @@
  *    deterministic `mock` backend is the default there. Set `LOLLM_BACKEND=llama`
  *    once the binding is bundled if you want real inference.
  */
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createInstance } from "../src/index.mjs";
@@ -39,25 +42,38 @@ async function seedDemoModel(store) {
   });
 }
 
+/**
+ * The platform filesystem is read-only apart from its temp directory, so the
+ * model store has to live there. `mkdtemp` gives every instance a unique,
+ * owner-only directory instead of a shared, guessable path.
+ *
+ * @returns {Promise<string>}
+ */
+async function resolveHome() {
+  const configured = process.env.LOLLM_HOME;
+  if (configured) return configured;
+  return fs.mkdtemp(path.join(os.tmpdir(), "lollm-"));
+}
+
 /** @type {Promise<(req: any, res: any) => Promise<void>> | undefined} */
 let ready;
 
-function boot() {
-  return createInstance({
-    home: process.env.LOLLM_HOME ?? "/tmp/lollm",
+async function boot() {
+  const home = await resolveHome();
+  const instance = await createInstance({
+    home,
     backend: process.env.LOLLM_BACKEND ?? "mock",
     playground: process.env.LOLLM_PLAYGROUND !== "0",
     modelsDir: process.env.LOLLM_MODELS_DIR ?? undefined,
-  }).then(async (instance) => {
-    if (process.env.LOLLM_BACKEND !== "llama") {
-      await seedDemoModel(instance.store).catch(() => {});
-    }
-    return createHandler({
-      config: instance.config,
-      store: instance.store,
-      engine: instance.engine,
-      logger: instance.logger,
-    });
+  });
+  if (process.env.LOLLM_BACKEND !== "llama") {
+    await seedDemoModel(instance.store).catch(() => {});
+  }
+  return createHandler({
+    config: instance.config,
+    store: instance.store,
+    engine: instance.engine,
+    logger: instance.logger,
   });
 }
 
@@ -75,7 +91,8 @@ export default async function handler(req, res) {
     ready = undefined;
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(`{"error":"lollm failed to start: ${String(/** @type {Error} */ (error)?.message ?? error)}"}`);
+    const message = `lollm failed to start: ${String(/** @type {Error} */ (error)?.message ?? error)}`;
+    res.end(JSON.stringify({ error: message }));
     return;
   }
   await handle(req, res);
