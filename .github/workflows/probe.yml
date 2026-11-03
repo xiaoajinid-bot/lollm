@@ -18,10 +18,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22.x"
+      - name: Resolve target URL
+        id: target
+        run: |
+          slug=$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '-')
+          url="https://lollm-ai-git-${slug}-xiaoajinid-bots-projects.vercel.app"
+          echo "Resolved $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Probe boot and one short completion
         continue-on-error: true
         env:
-          BASE_URL: https://lollm-ai-git-${{ github.ref_name }}-xiaoajinid-bots-projects.vercel.app
+          BASE_URL: ${{ steps.target.outputs.url }}
         run: |
           node scripts/probe.mjs "$BASE_URL" --num-predict 16 --json > probe.raw 2> probe.err || true
           node -e '
