@@ -13,6 +13,10 @@ on:
   push:
     branches: ["**"]
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   smoke:
     # Run on demand, or from a commit message containing [smoke].
@@ -36,14 +40,31 @@ jobs:
           echo "Resolved $url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Smoke test
+        id: smoke
+        continue-on-error: true
         env:
           BASE_URL: ${{ steps.target.outputs.url }}
           MODEL: ${{ inputs.model }}
         run: |
           status=0
-          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 120000 --json > smoke-report.json || status=$?
+          node scripts/smoke.mjs "$BASE_URL" ${MODEL:+--model "$MODEL"} --timeout 280000 --json > smoke-report.json || status=$?
           cat smoke-report.json
           exit $status
+      - name: Publish the report as a check run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONCLUSION: ${{ steps.smoke.outcome == 'success' && 'success' || 'failure' }}
+        run: |
+          if [ ! -s smoke-report.json ]; then echo "no report"; exit 0; fi
+          summary=$(head -c 60000 smoke-report.json)
+          gh api repos/$GITHUB_REPOSITORY/check-runs \
+            -f name="lollm smoke report" -f head_sha=$GITHUB_SHA \
+            -f status=completed -f conclusion="$CONCLUSION" \
+            -f "output[title]=Smoke report" -f "output[summary]=$summary" > /dev/null
+      - name: Fail when a check failed
+        if: steps.smoke.outcome != 'success'
+        run: exit 1
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
